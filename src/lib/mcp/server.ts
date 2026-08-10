@@ -1,5 +1,6 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
+import { LEGAL } from "../legal";
 import { createLogger } from "../logger.server";
 import { buildGreeting } from "./hello";
 
@@ -17,10 +18,20 @@ import { buildGreeting } from "./hello";
 
 const log = createLogger("mcp:server");
 
-/** Advertised to clients during `initialize`; keep the version in step with releases. */
+/**
+ * Advertised to clients during `initialize`; keep the version in step with releases.
+ *
+ * `name` is the programmatic identifier and `title` the display name. A client
+ * older than the `title` field falls back to rendering `name`, so the two are
+ * kept as the same brand rather than left to drift. Reading the display name
+ * from `LEGAL` means a product rename stays one edit, in the one place the
+ * Google consent screen and the legal documents already read from.
+ */
 export const MCP_SERVER_INFO = {
-	name: "google-health-connector",
+	name: "ghealth-connector",
+	title: LEGAL.appName,
 	version: "1.0.0",
+	websiteUrl: LEGAL.siteUrl,
 } as const;
 
 /** URI of the static greeting resource. Resources are addressed by URI, not by name. */
@@ -29,7 +40,7 @@ const GREETING_RESOURCE_URI = "hello://world";
 export function createMcpServer(): McpServer {
 	const server = new McpServer(MCP_SERVER_INFO, {
 		instructions:
-			"Hello-world MCP server for google-health-connector. Call `say_hello` to " +
+			`Hello-world MCP server for ${LEGAL.appName}. Call \`say_hello\` to ` +
 			"greet someone, or read `hello://world` for a static greeting.",
 	});
 

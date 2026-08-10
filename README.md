@@ -423,6 +423,10 @@ two-file change.
 | `src/lib/mcp/handler.server.ts` | `Request` → `Response` bridge: transport, logging, teardown        |
 | `src/routes/mcp.ts`            | The route itself                                                   |
 
+The identity a client sees during `initialize` — `title` and `websiteUrl` — is read from
+`LEGAL` in `src/lib/legal.ts`, so renaming the product reaches the MCP client list too
+rather than leaving a stale name behind.
+
 Register a client against a running app:
 
 ```sh
