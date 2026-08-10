@@ -69,6 +69,14 @@ export interface GetGoogleHealthAccessTokenOptions {
 	 * than as an opaque 403 from the API.
 	 */
 	requiredScopes?: readonly string[];
+	/**
+	 * Act for this user instead of whoever the request's session belongs to.
+	 *
+	 * This is what lets `/mcp` reach Google: an MCP request carries an API key,
+	 * not a session cookie, so there is no session to read the user from — but
+	 * the key resolves to a user id, and that is enough.
+	 */
+	userId?: string;
 }
 
 /**
@@ -80,21 +88,33 @@ export interface GetGoogleHealthAccessTokenOptions {
  */
 export async function getGoogleHealthAccessToken({
 	requiredScopes = [],
+	userId,
 }: GetGoogleHealthAccessTokenOptions = {}): Promise<GoogleHealthAccessToken> {
 	let token: Awaited<
 		ReturnType<ReturnType<typeof getAuth>["api"]["getAccessToken"]>
 	>;
 
 	try {
-		token = await getAuth().api.getAccessToken({
-			body: { providerId: GOOGLE_PROVIDER_ID },
-			headers: getRequest().headers,
-		});
+		// The two call shapes are mutually exclusive, and not by preference.
+		// better-auth resolves the user from the session when headers are present
+		// and answers UNAUTHORIZED if there is none — so passing headers *and* a
+		// `userId` would fail for exactly the callers the `userId` exists for.
+		// Anything that later "tidies this up" by always passing headers breaks
+		// `/mcp` and nothing else, which is a hard bug to find.
+		token = await (userId === undefined
+			? getAuth().api.getAccessToken({
+					body: { providerId: GOOGLE_PROVIDER_ID },
+					headers: getRequest().headers,
+				})
+			: getAuth().api.getAccessToken({
+					body: { providerId: GOOGLE_PROVIDER_ID, userId },
+				}));
 	} catch (error) {
 		// better-auth collapses "no linked account" and "the refresh call failed"
 		// into BAD_REQUEST. Both mean the same thing to a caller: send the user
 		// back through the consent screen.
 		log.error("could not obtain a google access token", {
+			userId: userId ?? null,
 			error: error instanceof Error ? error.message : String(error),
 		});
 		throw new GoogleHealthAuthorizationError(

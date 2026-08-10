@@ -400,8 +400,10 @@ const SECTIONS: readonly LegalSection[] = [
 				</Para>
 				<Bullets>
 					<li>
-						<strong>It is off until you turn it on.</strong> No MCP endpoint is
-						active for your account until you enable it and issue credentials.
+						<strong>It is off until you turn it on.</strong> Nothing of yours is
+						reachable over MCP until you generate an API key on your dashboard.
+						Generating that key is the act that turns it on, and revoking it is
+						the act that turns it off again.
 					</li>
 					<li>
 						<strong>It is scoped to you.</strong> Credentials you issue reach

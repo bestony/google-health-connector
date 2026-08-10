@@ -430,6 +430,23 @@ export const GOOGLE_HEALTH_DATA_POINT_TYPES: readonly GoogleHealthDataPointType[
 	];
 
 /**
+ * The scopes `users.dataTypes.dataPoints.list` accepts — which is to say,
+ * everything this API can read.
+ *
+ * Shorter than the consent screen's list of categories, and deliberately so:
+ * nutrition, reproductive health, logged symptoms and mindfulness have a
+ * `.writeonly` scope and no `.readonly` one, so their data can be written and
+ * never read back. A tool that offers to read them would be offering something
+ * the API cannot do.
+ */
+export const GOOGLE_HEALTH_READ_SCOPES: readonly string[] = [
+	"https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly",
+	"https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly",
+	"https://www.googleapis.com/auth/googlehealth.location.readonly",
+	"https://www.googleapis.com/auth/googlehealth.sleep.readonly",
+];
+
+/**
  * Energy burned as part of an activity, excluding the basal energy burn.
  */
 export interface ActiveEnergyBurned {

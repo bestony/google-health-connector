@@ -116,6 +116,12 @@ export interface GoogleHealthClientOptions {
 	 */
 	requiredScopes?: readonly string[];
 	/**
+	 * Act for this user rather than for whoever the request's session belongs
+	 * to. `/mcp` passes the id its API key resolved to, because an MCP request
+	 * carries no session cookie.
+	 */
+	userId?: string;
+	/**
 	 * Supplies the bearer token. Defaults to the signed-in user's, from the
 	 * request session; override it in tests, or to act for a user resolved some
 	 * other way.
@@ -160,6 +166,14 @@ export interface GoogleHealthClient {
 	listPairedDevices(): Promise<ListPairedDevicesResponse>;
 	getPairedDevice(name: string): Promise<PairedDevice>;
 	/**
+	 * The Google Health scopes this user actually granted.
+	 *
+	 * Reads the token the client already resolved, so asking costs nothing —
+	 * which is what makes it usable in an error path, where the answer to "why
+	 * was that refused" is usually "that category was never granted".
+	 */
+	grantedScopes(): Promise<readonly string[]>;
+	/**
 	 * Escape hatch for anything not wrapped above. `path` is relative to the
 	 * version segment, e.g. `users/me/dataTypes/steps/dataPoints`.
 	 */
@@ -183,7 +197,10 @@ export function createGoogleHealthClient(
 	const resolveToken =
 		options.getAccessToken ??
 		(() =>
-			getGoogleHealthAccessToken({ requiredScopes: options.requiredScopes }));
+			getGoogleHealthAccessToken({
+				requiredScopes: options.requiredScopes,
+				userId: options.userId,
+			}));
 
 	// Memoised, not cached: one token per client, and a client per request.
 	let tokenPromise: Promise<GoogleHealthAccessToken> | undefined;
@@ -387,6 +404,10 @@ export function createGoogleHealthClient(
 
 		getPairedDevice(name) {
 			return request<PairedDevice>("GET", name);
+		},
+
+		async grantedScopes() {
+			return (await accessToken()).grantedScopes;
 		},
 
 		request,

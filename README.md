@@ -510,13 +510,38 @@ user id it needs.
 ## MCP server
 
 `POST /mcp` speaks the [Model Context Protocol](https://modelcontextprotocol.io) over its
-Streamable HTTP transport, so any MCP client can talk to this app. It ships with a
-hello-world tool and resource; the point of the layout is that adding a real one is a
-two-file change.
+Streamable HTTP transport, so any MCP client can read the user's Google Health data.
+
+| Tool | Arguments | Returns |
+| ---- | --------- | ------- |
+| `list_health_data_types` | none | The 40 queryable data types, how each is timed, and which consent categories are readable at all |
+| `read_health_data` | `dataType`, `from`, `to`, `limit` | Summarised data points, with `truncated` and whether the history window was clamped |
+| `get_health_profile` | none | Profile and settings — date of birth, height, biological sex, units |
+
+Two limits are worth knowing before you wire a client up.
+
+**Reads reach back 90 days.** `HISTORY_LIMIT_DAYS` in `src/lib/mcp/health.ts` is the free
+tier's window from `plans.ts`, applied to everyone: there is no billing and no plan column on
+the user, so there is nothing to tell a subscriber apart with. A request for more is clamped
+*and says so in the reply* — silently returning three months when a year was asked for would
+have a model conclude the user has no older data, which is a wrong answer rather than a
+limitation.
+
+**Only four categories can be read.** `dataPoints.list` accepts `activity_and_fitness`,
+`health_metrics_and_measurements`, `location` and `sleep` readonly. Nutrition, reproductive
+health, logged symptoms and mindfulness have a `.writeonly` scope and no `.readonly` one — in
+v4 they can be written and never read back. The set is generated into
+`GOOGLE_HEALTH_READ_SCOPES`, so a fifth category arrives with a regeneration rather than going
+unnoticed.
+
+Nothing maps a data type onto a consent category: Google publishes no such mapping, and
+inventing one would be guesswork that goes stale silently. A read the user has not granted
+comes back as Google's own 403, turned into a message naming what is readable, what they
+granted, and the dashboard URL to change it.
 
 | File                           | Role                                                              |
 | ------------------------------ | ----------------------------------------------------------------- |
-| `src/lib/mcp/hello.ts`         | Domain logic — plain functions, no MCP or HTTP types                |
+| `src/lib/mcp/health.ts`        | Domain logic — clamping, summarising, the catalog. No MCP or HTTP types |
 | `src/lib/mcp/server.ts`        | `createMcpServer(identity)` — which tools and resources are exposed, and who may invoke them |
 | `src/lib/mcp/auth.server.ts`   | Who is calling: pulls the API key off the request and verifies it   |
 | `src/lib/mcp/handler.server.ts` | `Request` → `Response` bridge: transport, logging, teardown        |
@@ -569,7 +594,7 @@ curl -s http://localhost:3000/mcp \
   -H "Authorization: Bearer $GHEALTH_API_KEY" \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"say_hello","arguments":{"name":"Bestony"}}}'
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_health_data","arguments":{"dataType":"steps"}}}'
 ```
 
 Three decisions are worth knowing before you extend it:
@@ -587,10 +612,14 @@ Three decisions are worth knowing before you extend it:
   (session teardown) are session-oriented, so both answer `405` with `Allow: POST`, which the
   spec permits and conforming clients handle.
 
-Adding a tool: write the logic as a plain function next to `hello.ts`, then register it in
-`createMcpServer()`. Keeping the logic out of the registration is what lets it be tested
-without a transport, and `zod` schemas in the registration are what the client sees as the
-tool's JSON Schema.
+Adding a tool: write the logic as a plain function in `health.ts` (or a sibling), then
+register it in `createMcpServer()`. Keeping the logic out of the registration is what lets it
+be tested without a transport, and `zod` schemas in the registration are what the client sees
+as the tool's JSON Schema.
+
+Tool failures are returned with `isError: true` rather than thrown, so the model reads the
+reason and retries differently — an unknown data type id, a malformed date, an upper bound on
+ECG and an ungranted category all come back as a sentence saying what to do instead.
 
 Set `LOG_LEVEL=debug` to log every request's JSON-RPC method, status and duration under the
 `mcp:handler` and `mcp:server` scopes — the client's own logs are usually out of reach, so
