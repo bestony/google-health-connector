@@ -31,6 +31,11 @@ Authentication is handled by [better-auth](https://better-auth.com), persisted t
 | `src/lib/auth-providers.ts`   | Tells the browser which social providers are configured, and their client ID |
 | `src/lib/auth-errors.ts`      | Maps better-auth's OAuth error codes and messages to user-facing copy      |
 | `src/components/google-one-tap.tsx` | Mounts the One Tap prompt and turns its result into a soft navigation |
+| `src/lib/google-health-scopes.ts` | Catalog of the Google Health scopes the app can ask for — pure data     |
+| `src/lib/google-health-access.ts` | `fetchGoogleHealthAccess` server function: which scopes were granted   |
+| `src/lib/google-health-client.ts` | Browser entry point that starts the authorization round trip           |
+| `src/lib/google-health-token.server.ts` | Access tokens for calling Google, refreshed by better-auth       |
+| `src/components/google-health-authorization.tsx` | The authorize button and permission list on `/dashboard` |
 | `src/routes/api/auth/$.ts`    | Mounts every better-auth endpoint under `/api/auth/*`                      |
 | `src/db/auth-schema.ts`       | Generated Drizzle tables: `user`, `session`, `account`, `verification`     |
 | `src/db/client.server.ts`     | Lazy Drizzle/libSQL client (`getDb()`)                                     |
@@ -93,8 +98,8 @@ Two choices worth knowing about, both in `src/lib/auth.server.ts`:
 - Account linking trusts Google's `email_verified` claim, but better-auth also requires the
   *existing local* account to be verified before it merges the two. This app has no email
   verification flow, so signing in with Google using an address that already has a password
-  account fails with `account_not_linked` — the login page explains that. Request extra Google
-  scopes later with `authClient.linkSocial({ provider: "google", scopes: [...] })`.
+  account fails with `account_not_linked` — the login page explains that. Extra Google scopes
+  are requested after sign-in, not during it — see *Google Health authorization* below.
 
 ### Google One Tap
 
@@ -131,6 +136,84 @@ reason is only ever visible in the browser console, at `debug` level:
 ```js
 localStorage.setItem('app:logLevel', 'debug')   // then reload; see src/lib/logger-client.ts
 ```
+
+### Google Health authorization
+
+Signing in with Google grants `email`, `profile` and `openid` — nothing more. Reading or
+writing health data is a *separate* consent, asked for from the **Google Health** card on
+`/dashboard` once the user is signed in.
+
+```
+src/lib/google-health-scopes.ts        the 21 scopes, built from one prefix
+src/lib/google-health-client.ts        POST /api/auth/link-social → redirect to Google
+src/lib/google-health-access.ts        reads account.scope back → what was granted
+src/lib/google-health-token.server.ts  access token for the actual API calls
+```
+
+The scopes cover twelve data types. Nine offer both read and write, three are read-only
+(`irn`, `ecg`, `settings`), and each full scope is
+`https://www.googleapis.com/auth/googlehealth.<type>.<readonly|writeonly>`:
+
+| Data type | Read | Write |
+| --------- | ---- | ----- |
+| `activity_and_fitness` | ✓ | ✓ |
+| `health_metrics_and_measurements` | ✓ | ✓ |
+| `location` (workout GPS) | ✓ | ✓ |
+| `nutrition` | ✓ | ✓ |
+| `sleep` | ✓ | ✓ |
+| `reproductive_health` | ✓ | ✓ |
+| `logged_symptoms` | ✓ | ✓ |
+| `mindfulness` | ✓ | ✓ |
+| `profile` | ✓ | ✓ |
+| `irn` (irregular rhythm notifications) | ✓ | — |
+| `ecg` | ✓ | — |
+| `settings` | ✓ | — |
+
+Add a data type to `GOOGLE_HEALTH_DATA_TYPES` and the button, the consent request and the
+permission list all pick it up; nothing else needs touching.
+
+Before any of it works, the Google Cloud project needs the **Google Health API** enabled
+and every scope above added to the **OAuth consent screen**. Google rejects an
+authorization request containing a scope the consent screen does not declare, with
+`invalid_scope`. Most of these are *sensitive* or *restricted* scopes, so a project that
+has not been through Google's verification can only use them with accounts listed as test
+users.
+
+Four decisions are worth knowing about:
+
+- **It links, it does not sign in.** The flow goes through `/link-social`, not
+  `/sign-in/social`, because the user already has a session. Linking attaches the new grant
+  to the existing `account` row — same refresh token, no second session — and it is the only
+  better-auth endpoint that accepts extra `scopes`.
+- **Authorization is incremental.** better-auth's Google provider always sends
+  `include_granted_scopes=true`, so a later request never revokes an earlier grant. `account.scope`
+  holds what *Google* returned, not what was asked for, which is why the card can report a
+  permission the user unticked as not granted.
+- **`prompt` is overridden to `consent`.** The provider-level `select_account` is wrong for a
+  link: the account is already decided, and Google only issues a refresh token when the consent
+  screen is actually shown. `src/lib/google-health-client.ts` rewrites the authorization URL
+  before navigating, and adds `login_hint` so the right Google account is preselected — pick a
+  different one and better-auth fails the callback with `email_doesn't_match`.
+- **`/dashboard` is both the caller and the landing page.** Success returns to
+  `/dashboard?health=granted`; a failure comes back to `/dashboard?error=<code>`, which
+  `src/lib/auth-errors.ts` turns into readable copy.
+
+Calling the API afterwards never touches the stored tokens directly — better-auth decrypts
+the refresh token, renews the access token when it is close to expiry and writes the pair
+back:
+
+```ts
+import { getGoogleHealthAccessToken } from '#/lib/google-health-token.server'
+import { googleHealthScope } from '#/lib/google-health-scopes'
+
+const { accessToken } = await getGoogleHealthAccessToken({
+  requiredScopes: [googleHealthScope('sleep', 'read')],
+})
+```
+
+It throws `GoogleHealthAuthorizationError` when there is no linked account, when the refresh
+fails, or when a required scope was never granted — the error carries `missingScopes`, which
+is exactly what the user has to be sent back through the consent screen for.
 
 ## Styling
 

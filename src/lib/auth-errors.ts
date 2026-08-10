@@ -1,11 +1,12 @@
 /**
  * Copy for the OAuth failures better-auth reports through the URL.
  *
- * A failed social sign-in never returns to the caller's promise: better-auth
- * redirects the browser to `errorCallbackURL` with a machine-readable
- * `?error=<code>` (and sometimes `&error_description=`). Codes come from two
- * places — better-auth's own callback handling and, passed through verbatim,
- * the provider itself (`access_denied`, `redirect_uri_mismatch`, …).
+ * A failed social sign-in — or a failed account link, which takes the same
+ * round trip — never returns to the caller's promise: better-auth redirects the
+ * browser to `errorCallbackURL` with a machine-readable `?error=<code>` (and
+ * sometimes `&error_description=`). Codes come from two places — better-auth's
+ * own callback handling and, passed through verbatim, the provider itself
+ * (`access_denied`, `redirect_uri_mismatch`, …).
  *
  * Only the codes a user can plausibly hit are spelled out. Everything else
  * falls back to a generic message that still surfaces the raw code, so an
@@ -17,6 +18,15 @@ const OAUTH_ERROR_MESSAGES: Record<string, string> = {
 	invalid_id_token: "Google sign-in could not be verified. Try again.",
 	account_not_linked:
 		"An account with this email address already exists. Sign in with your password first, then connect Google from your account.",
+
+	// Only reachable from the link flow (`/link-social`), where the account is
+	// already decided: the user answered Google's account chooser with someone
+	// other than the account this session belongs to.
+	account_already_linked_to_different_user:
+		"That Google account is already connected to a different user here. Pick the Google account this session belongs to.",
+	"email_doesn't_match":
+		"That is a different Google account from the one you are signed in with. Pick the account matching your email address.",
+
 	email_not_found: "Google did not return an email address for this account.",
 	invalid_callback_request: "Google sign-in could not be completed. Try again.",
 	invalid_code: "Google sign-in expired before it finished. Try again.",
