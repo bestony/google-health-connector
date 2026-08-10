@@ -20,8 +20,9 @@ pricing (Chinese).
 ```bash
 pnpm dev                    # vite dev on :3000
 pnpm build                  # production build (Nitro output)
-pnpm check                  # biome lint + format check (see baseline caveat below)
+pnpm check                  # biome lint + format check — the pre-push gate; keep it at 0 errors
 pnpm lint / pnpm format     # biome, individually
+pnpm test                   # unit tests via Node's built-in runner (no vitest/jest)
 npx tsc --noEmit            # typecheck — there is no pnpm script for it
 ```
 
@@ -47,17 +48,25 @@ pnpm generate-routes        # rewrites src/routeTree.gen.ts (the dev server also
 names, so generating for all three means running it three times with the variable
 overridden per run (see README → Migrations).
 
-### Testing and baseline state
+### Testing and quality gates
 
-**No test runner is configured** — there is no vitest/jest and no `test` script.
-Verify changes with `npx tsc --noEmit`, `pnpm check`, and by exercising the app
+Unit tests use Node's built-in runner (`pnpm test`); coverage is deliberately thin —
+the pure logic in `google-health-filter.ts` and `mcp/health.ts`. Verify behaviour
+changes with `npx tsc --noEmit`, `pnpm check`, and by exercising the app
 (`pnpm dev`, or `curl` against `/mcp` — README → MCP server has a working example).
-If tests are wanted, that is a new decision, not a restoration.
 
-Both checks have a **pre-existing failing baseline**, confined to CTA-scaffold files:
-`src/router.tsx` (3 unused-import errors), `vite.config.ts`, `biome.json`, and
-`src/integrations/tanstack-query/*`. All hand-written application code passes. Judge
-your change by whether it adds failures, not by an exit code of 0.
+`biome.json` enables a strict ruleset on top of `recommended`. Rules the codebase
+already satisfied are pinned at `error`; pre-existing debt (nested ternaries, long
+functions, variable shadowing, …) surfaces as `warn` — burn a warning down, then
+promote its rule to `error`. The overrides encode deliberate architecture, not
+convenience: generated files are unlinted, the logger wrappers may call `console`,
+`env.server.ts` may read `process.env`, and the dialect schema set may re-export.
+Do not silence a rule to land a change.
+
+lefthook (`lefthook.yml`, installed by the `prepare` script) enforces the gates:
+pre-commit runs `biome check --write` on staged files; pre-push runs `pnpm check`,
+`tsc --noEmit` and `pnpm test`. All three are green at HEAD — a red gate means your
+change broke it, not baseline noise.
 
 ## Architecture
 
