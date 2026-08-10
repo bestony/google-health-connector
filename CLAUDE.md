@@ -49,10 +49,13 @@ overridden per run (see README → Migrations).
 
 ### Testing and baseline state
 
-**No test runner is configured** — there is no vitest/jest and no `test` script.
-Verify changes with `npx tsc --noEmit`, `pnpm check`, and by exercising the app
-(`pnpm dev`, or `curl` against `/mcp` — README → MCP server has a working example).
-If tests are wanted, that is a new decision, not a restoration.
+Vitest is configured for unit tests. `pnpm test` runs the unit suite and
+`pnpm test:coverage` enforces 95% minimum statement, branch, function and line
+coverage for the hand-written domain and transport-boundary modules listed in
+`vitest.config.ts`. Generated Google schema code and server adapters remain
+integration/build-test scope. Verify changes with `pnpm test:coverage`,
+`npx tsc --noEmit`, `pnpm check`, and by exercising the app (`pnpm dev`, or
+`curl` against `/mcp` — README → MCP server has a working example).
 
 Both checks have a **pre-existing failing baseline**, confined to CTA-scaffold files:
 `src/router.tsx` (3 unused-import errors), `vite.config.ts`, `biome.json`, and
