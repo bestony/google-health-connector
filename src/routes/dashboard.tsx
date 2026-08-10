@@ -2,6 +2,12 @@ import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { ApiKeyCard } from "../components/api-key-card";
 import { GoogleHealthAuthorization } from "../components/google-health-authorization";
+import {
+	Tabs,
+	TabsContent,
+	TabsList,
+	TabsTrigger,
+} from "../components/ui/tabs";
 import { API_KEY_QUERY_KEY, apiKeyQueryOptions } from "../lib/api-key";
 import { authClient } from "../lib/auth-client";
 import {
@@ -9,6 +15,7 @@ import {
 	sanitizeOAuthErrorParam,
 } from "../lib/auth-errors";
 import { googleHealthAccessQueryOptions } from "../lib/google-health-access";
+import { GOOGLE_HEALTH_SCOPES } from "../lib/google-health-scopes";
 import { mcpEndpointQueryOptions } from "../lib/mcp/endpoint";
 import { preventSilentAccess } from "../lib/one-tap-client";
 
@@ -94,6 +101,17 @@ function DashboardPage() {
 			? describeOAuthError(search.error, search.error_description)
 			: null;
 
+	// Which tab opens follows from where the user is in the setup: until every
+	// permission is granted the work to do is on the Google Health tab, and once
+	// it all is, the thing they came back for is the key. An OAuth error wins
+	// over both — it renders inside the Google Health card, and a default that
+	// hides it would read as a silent success.
+	const allGranted =
+		health.status === "linked" &&
+		GOOGLE_HEALTH_SCOPES.every((scope) => health.grantedScopes.includes(scope));
+	const defaultTab =
+		oauthError === null && allGranted ? "api-key" : "google-health";
+
 	/**
 	 * Re-read the key after the card has created or revoked one.
 	 *
@@ -147,16 +165,35 @@ function DashboardPage() {
 				<dd>{session.user.email}</dd>
 			</dl>
 
-			<GoogleHealthAuthorization
-				access={health}
-				loginHint={session.user.email}
-				callbackURL={HEALTH_CALLBACK_URL}
-				errorCallbackURL={HEALTH_ERROR_CALLBACK_URL}
-				error={oauthError}
-				justAuthorized={search.health === "granted"}
-			/>
-
-			<ApiKeyCard status={apiKey} mcpUrl={mcpUrl} onChanged={onApiKeyChanged} />
+			<Tabs className="mt-8" defaultValue={defaultTab}>
+				<TabsList>
+					<TabsTrigger value="google-health">Google Health</TabsTrigger>
+					<TabsTrigger value="api-key">API key</TabsTrigger>
+				</TabsList>
+				{/* Both panels are kept mounted: Base UI unmounts a hidden panel by
+				    default, and both cards hold state that must survive a tab switch —
+				    above all ApiKeyCard's plaintext key, which is shown exactly once
+				    from local state and is unrecoverable once the card unmounts. A
+				    hidden panel is rendered `hidden` and `inert`, so keeping it costs
+				    nothing. */}
+				<TabsContent keepMounted value="google-health">
+					<GoogleHealthAuthorization
+						access={health}
+						loginHint={session.user.email}
+						callbackURL={HEALTH_CALLBACK_URL}
+						errorCallbackURL={HEALTH_ERROR_CALLBACK_URL}
+						error={oauthError}
+						justAuthorized={search.health === "granted"}
+					/>
+				</TabsContent>
+				<TabsContent keepMounted value="api-key">
+					<ApiKeyCard
+						status={apiKey}
+						mcpUrl={mcpUrl}
+						onChanged={onApiKeyChanged}
+					/>
+				</TabsContent>
+			</Tabs>
 
 			<button
 				className="mt-6 rounded bg-black px-3 py-2 text-white disabled:opacity-50"
