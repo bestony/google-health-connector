@@ -409,6 +409,60 @@ Cross-references inside the documents ("… see section 7") are rendered by `<Re
 and numbered from the section order at render time. Never write the number by hand: an
 unknown id throws, but a stale number just points the reader at the wrong clause.
 
+## MCP server
+
+`POST /mcp` speaks the [Model Context Protocol](https://modelcontextprotocol.io) over its
+Streamable HTTP transport, so any MCP client can talk to this app. It ships with a
+hello-world tool and resource; the point of the layout is that adding a real one is a
+two-file change.
+
+| File                           | Role                                                              |
+| ------------------------------ | ----------------------------------------------------------------- |
+| `src/lib/mcp/hello.ts`         | Domain logic — plain functions, no MCP or HTTP types                |
+| `src/lib/mcp/server.ts`        | `createMcpServer()` — which tools, resources and prompts are exposed |
+| `src/lib/mcp/handler.server.ts` | `Request` → `Response` bridge: transport, logging, teardown        |
+| `src/routes/mcp.ts`            | The route itself                                                   |
+
+Register a client against a running app:
+
+```sh
+claude mcp add --transport http hello http://localhost:3000/mcp
+```
+
+Or exercise it by hand. The Streamable HTTP spec requires the client to accept **both**
+content types, so an `Accept: application/json` alone is answered with `406`:
+
+```sh
+curl -s http://localhost:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"say_hello","arguments":{"name":"Bestony"}}}'
+```
+
+Three decisions are worth knowing before you extend it:
+
+- **Stateless, one server per request.** `createMcpServer()` is a factory, not a singleton,
+  because `McpServer` holds a reference to the single transport it is connected to and the
+  SDK refuses to reuse a stateless transport. That is also what makes the route correct on a
+  serverless host, where consecutive requests land on different instances. The cost is that
+  server-initiated traffic — sampling, elicitation, subscriptions — is unavailable.
+- **JSON responses, not SSE.** `enableJsonResponse: true` returns one buffered body instead
+  of holding a stream open. Nothing here reports progress, and an idle long-lived stream is
+  what a serverless platform bills for and then kills mid-flight. Turn it off only when a
+  tool genuinely streams.
+- **Only `POST` is served.** `GET` (the standalone notification stream) and `DELETE`
+  (session teardown) are session-oriented, so both answer `405` with `Allow: POST`, which the
+  spec permits and conforming clients handle.
+
+Adding a tool: write the logic as a plain function next to `hello.ts`, then register it in
+`createMcpServer()`. Keeping the logic out of the registration is what lets it be tested
+without a transport, and `zod` schemas in the registration are what the client sees as the
+tool's JSON Schema.
+
+Set `LOG_LEVEL=debug` to log every request's JSON-RPC method, status and duration under the
+`mcp:handler` and `mcp:server` scopes — the client's own logs are usually out of reach, so
+this is the first place to look when a tool call misbehaves.
+
 ## Styling
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
