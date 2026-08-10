@@ -20,12 +20,19 @@
 export const API_KEY_PREFIX = "ghc_";
 
 /**
- * How often one key may be verified.
+ * How often one key may be verified — 100 queries per second.
  *
  * The plugin's own default is 10 requests per *day*, which a single agent
  * conversation exhausts — so this is set explicitly rather than inherited. The
  * ceiling is meant to stop a runaway tool-calling loop, not to ration normal
  * use.
+ *
+ * The window is expressed as one second rather than as an equivalent average
+ * over a longer one (6000 per minute is also "100 QPS") because the plugin
+ * resets a key's counter only once a full window has passed *since its last
+ * request*: a wide window turns a burst into a cooldown of that same width,
+ * while a one-second window caps the instantaneous rate and lets a client that
+ * overruns it recover after a one-second pause.
  *
  * These values are copied onto each key row when it is issued, so changing them
  * only affects keys created afterwards. Existing keys keep the limit they were
@@ -33,9 +40,9 @@ export const API_KEY_PREFIX = "ghc_";
  */
 export const API_KEY_RATE_LIMIT = {
 	/** Length of the window, in milliseconds. */
-	timeWindow: 60_000,
+	timeWindow: 1_000,
 	/** Verifications allowed inside one window. */
-	maxRequests: 120,
+	maxRequests: 100,
 } as const;
 
 /**

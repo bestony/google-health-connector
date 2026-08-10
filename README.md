@@ -496,9 +496,13 @@ has been told their old key was replaced has no reason to suspect it still opens
 Two settings are worth knowing about, both in `src/lib/api-key-config.ts`:
 
 - **`API_KEY_RATE_LIMIT`.** The plugin's own default is 10 verifications per *day*, which a
-  single agent conversation exhausts. This app sets 120 per minute. The values are copied
-  onto each key row when it is issued, so changing them only affects keys created
-  afterwards.
+  single agent conversation exhausts. This app sets 100 per second. The window is one
+  second rather than an equivalent average over a longer one (6000 per minute is also
+  "100 QPS") because the plugin resets a key's counter only once a full window has passed
+  *since its last request*: a wide window turns a burst into a cooldown of that same width.
+  The values are copied onto each key row when it is issued, so changing them only affects
+  keys created afterwards — an existing key keeps the limit it was born with until it is
+  regenerated from the dashboard.
 - **`API_KEY_PREFIX`.** Every key starts with `ghc_`, so a secret scanner — or a human
   reading a leaked log line — can recognise one.
 
