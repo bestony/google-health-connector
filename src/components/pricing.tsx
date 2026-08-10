@@ -117,6 +117,20 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
 				)}
 			</p>
 
+			{/* The second billing period, under the headline rather than beside it:
+			    two prices on one line reads as a range, which is the one thing this
+			    is not. */}
+			{plan.altPrice !== null && (
+				<p
+					className={`mt-2 text-sm ${
+						featured ? "text-background/70" : "text-muted-foreground"
+					}`}
+				>
+					or {plan.altPrice.amount}/{plan.altPrice.period} —{" "}
+					{plan.altPrice.note}
+				</p>
+			)}
+
 			<p
 				className={`mt-6 text-base/7 ${
 					featured ? "text-background/80" : "text-muted-foreground"
