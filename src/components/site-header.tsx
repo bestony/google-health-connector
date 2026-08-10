@@ -40,7 +40,16 @@ export function SiteHeader({ signedIn, showAction = true }: SiteHeaderProps) {
 					className="flex items-center gap-2.5 text-base font-semibold tracking-tight transition-opacity hover:opacity-80"
 					to="/"
 				>
-					<AppMark />
+					{/* `alt` is empty on purpose: the wordmark beside it already says the
+					    name, and a screen reader announcing it twice is noise. Width and
+					    height are set so the row does not reflow once the file loads. */}
+					<img
+						className="size-8 shrink-0"
+						src="/logo.svg"
+						alt=""
+						width={32}
+						height={32}
+					/>
 					{LEGAL.appName}
 				</Link>
 
@@ -66,26 +75,5 @@ export function SiteHeader({ signedIn, showAction = true }: SiteHeaderProps) {
 					))}
 			</div>
 		</header>
-	);
-}
-
-/** The wordmark's glyph: an ECG trace, drawn rather than shipped as an asset. */
-function AppMark() {
-	return (
-		<span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground">
-			<svg
-				className="size-4"
-				viewBox="0 0 24 24"
-				fill="none"
-				stroke="currentColor"
-				strokeWidth="2.5"
-				strokeLinecap="round"
-				strokeLinejoin="round"
-				aria-hidden="true"
-				focusable="false"
-			>
-				<path d="M3 12h3.5l2-6 4 12 2.5-6H21" />
-			</svg>
-		</span>
 	);
 }

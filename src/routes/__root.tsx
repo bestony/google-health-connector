@@ -43,6 +43,14 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 			},
 		],
 		links: [
+			// The same file the header renders. An SVG icon needs no size variants,
+			// and browsers that cannot use one fall back to requesting
+			// `/favicon.ico` on their own.
+			{
+				rel: "icon",
+				href: "/logo.svg",
+				type: "image/svg+xml",
+			},
 			{
 				rel: "stylesheet",
 				href: appCss,

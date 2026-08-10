@@ -13,3 +13,10 @@ dist-ssr
 __unconfig*
 todos.json
 test.db
+
+# Vite serves this directory verbatim at the site root, so it has to be
+# committed. It is re-included explicitly because a `Public/` rule in a global
+# ignore file matches it on a case-insensitive filesystem, which silently drops
+# every asset in here — the directory has to be re-included, not just the files,
+# or git never descends into it.
+!public/
