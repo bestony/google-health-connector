@@ -423,10 +423,11 @@ Three things are worth knowing before you use it.
 generated catalog carries all three, and the client takes the path form — so
 `listDataPoints('daily-resting-heart-rate', …)` is the only one you type.
 
-**The time filter is not uniform, and getting it wrong returns an empty page rather than an
-error.** Which field a filter may name depends on the type: `interval.start_time` for
-interval types, `sample_time.physical_time` for samples, `date` for daily summaries. Two
-types then break even that rule, and `google-health-filter.ts` encodes both:
+**The time filter is not uniform, and an invalid member can fail the request or return an
+empty page.** Which field a filter may name depends on the collection: `interval.start_time`
+for interval collections, `sample_time.physical_time` for samples, `date` for daily
+summaries, and `interval.civil_start_time` for sessions. Two session types then break that
+rule, and `google-health-filter.ts` encodes both:
 
 - **Sleep** filters on its *end* time. A night that began before the window and ended inside
   it is the normal case, and filtering on the start would drop exactly the night you asked

@@ -9,12 +9,12 @@ import {
  *
  * The API filters by time with an [AIP-160](https://google.aip.dev/160)
  * expression, and which field that expression may name depends on the data
- * type: an interval type is filtered on `interval.start_time`, a sample type on
- * `sample_time.physical_time`, a daily summary on `date`. Get it wrong and the
- * request does not fail — it returns an empty page, which is the worst possible
- * way to be wrong.
+ * type: an interval collection is filtered on `interval.start_time`, a sample
+ * collection on `sample_time.physical_time`, a daily summary on `date`, and a
+ * session collection on `interval.civil_start_time`. Get it wrong and the API
+ * can reject the request or return an empty page.
  *
- * Two types then break even that rule, and Google says so explicitly:
+ * Two session types then break that rule, and Google says so explicitly:
  *
  * - **Sleep** is filtered on its *end* time. A session that began before the
  *   window and ended inside it is the normal case for sleep, so filtering on
@@ -54,8 +54,8 @@ interface TimeField {
 	path: string;
 	/** Whether the API accepts an upper bound on it. */
 	rangeable: boolean;
-	/** How a bound is rendered: an instant, or a calendar day. */
-	literal: "timestamp" | "date";
+	/** How a bound is rendered: an instant, civil date-time, or calendar day. */
+	literal: "timestamp" | "civilDateTime" | "date";
 }
 
 function timeField(type: GoogleHealthDataPointType): TimeField {
@@ -71,6 +71,13 @@ function timeField(type: GoogleHealthDataPointType): TimeField {
 			path: "interval.start_time",
 			rangeable: false,
 			literal: "timestamp",
+		};
+	}
+	if (type.collection === "session") {
+		return {
+			path: "interval.civil_start_time",
+			rangeable: true,
+			literal: "civilDateTime",
 		};
 	}
 
@@ -95,6 +102,17 @@ function timeField(type: GoogleHealthDataPointType): TimeField {
 /** `2026-08-10T12:34:56.000Z`, which is the RFC 3339 the API expects. */
 function timestampLiteral(at: Date): string {
 	return at.toISOString();
+}
+
+/**
+ * `2026-08-10T12:34:56`, without an offset as Google's civil filter requires.
+ *
+ * `Date` has already normalized the caller's instant to UTC. The API interprets
+ * the resulting wall time in the user's local timezone. This is the same UTC
+ * convention used for daily filters below and keeps the conversion explicit.
+ */
+function civilDateTimeLiteral(at: Date): string {
+	return at.toISOString().slice(0, 19);
 }
 
 /**
@@ -132,7 +150,12 @@ export function dataPointTimeFilter(
 ): string | undefined {
 	const type = googleHealthDataType(id);
 	const field = timeField(type);
-	const render = field.literal === "date" ? dateLiteral : timestampLiteral;
+	const render =
+		field.literal === "date"
+			? dateLiteral
+			: field.literal === "civilDateTime"
+				? civilDateTimeLiteral
+				: timestampLiteral;
 
 	if (range.to !== undefined && !field.rangeable) {
 		throw new Error(
