@@ -1,12 +1,15 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
+import { ApiKeyCard } from "../components/api-key-card";
 import { GoogleHealthAuthorization } from "../components/google-health-authorization";
+import { API_KEY_QUERY_KEY, apiKeyQueryOptions } from "../lib/api-key";
 import { authClient } from "../lib/auth-client";
 import {
 	describeOAuthError,
 	sanitizeOAuthErrorParam,
 } from "../lib/auth-errors";
 import { googleHealthAccessQueryOptions } from "../lib/google-health-access";
+import { mcpEndpointQueryOptions } from "../lib/mcp/endpoint";
 import { preventSilentAccess } from "../lib/one-tap-client";
 import { SESSION_QUERY_KEY } from "../lib/session";
 
@@ -63,11 +66,18 @@ export const Route = createFileRoute("/dashboard")({
 		}
 		return { session: context.session };
 	},
-	// What the user has already granted decides the whole card — its badge, its
-	// button label and its permission list — so it is resolved before paint
-	// rather than popped in afterwards.
-	loader: ({ context }) =>
-		context.queryClient.ensureQueryData(googleHealthAccessQueryOptions()),
+	// Each card's whole shape — badge, button label, contents — follows from
+	// what the server already knows, so all of it is resolved before paint
+	// rather than popped in afterwards. The three are independent, so they are
+	// fetched together instead of in sequence.
+	loader: async ({ context }) => {
+		const [health, apiKey, mcpUrl] = await Promise.all([
+			context.queryClient.ensureQueryData(googleHealthAccessQueryOptions()),
+			context.queryClient.ensureQueryData(apiKeyQueryOptions()),
+			context.queryClient.ensureQueryData(mcpEndpointQueryOptions()),
+		]);
+		return { health, apiKey, mcpUrl };
+	},
 	component: DashboardPage,
 });
 
@@ -75,7 +85,7 @@ function DashboardPage() {
 	const router = useRouter();
 	const { session, queryClient } = Route.useRouteContext();
 	const search = Route.useSearch();
-	const health = Route.useLoaderData();
+	const { health, apiKey, mcpUrl } = Route.useLoaderData();
 	const [pending, setPending] = useState(false);
 
 	// A failed link round trip lands here as a query param, so it has to be read
@@ -84,6 +94,21 @@ function DashboardPage() {
 		search.error !== undefined
 			? describeOAuthError(search.error, search.error_description)
 			: null;
+
+	/**
+	 * Re-read the key after the card has created or revoked one.
+	 *
+	 * The entry is removed rather than invalidated. Invalidation marks a query
+	 * stale and refetches the ones something is observing — and nothing observes
+	 * this one, because the loader reads it through `ensureQueryData`, which
+	 * hands back whatever is cached without caring that it went stale a moment
+	 * ago. Removing it leaves nothing to hand back, so the re-run loader has to
+	 * ask the server, and the card stops describing the key it just replaced.
+	 */
+	async function onApiKeyChanged() {
+		queryClient.removeQueries({ queryKey: API_KEY_QUERY_KEY });
+		await router.invalidate();
+	}
 
 	async function onSignOut() {
 		setPending(true);
@@ -122,6 +147,8 @@ function DashboardPage() {
 				error={oauthError}
 				justAuthorized={search.health === "granted"}
 			/>
+
+			<ApiKeyCard status={apiKey} mcpUrl={mcpUrl} onChanged={onApiKeyChanged} />
 
 			<button
 				className="mt-6 rounded bg-black px-3 py-2 text-white disabled:opacity-50"

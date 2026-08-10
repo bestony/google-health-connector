@@ -195,8 +195,11 @@ Authentication is handled by [better-auth](https://better-auth.com), persisted t
 | `src/lib/google-health-client.ts` | Browser entry point that starts the authorization round trip           |
 | `src/lib/google-health-token.server.ts` | Access tokens for calling Google, refreshed by better-auth       |
 | `src/components/google-health-authorization.tsx` | The authorize button and permission list on `/dashboard` |
+| `src/lib/api-key-config.ts`   | Key prefix, rate limit and header name — pure data, shared by both sides    |
+| `src/lib/api-key.ts`          | Issue, read and revoke the signed-in user's one API key                    |
+| `src/components/api-key-card.tsx` | The API key card on `/dashboard`                                       |
 | `src/routes/api/auth/$.ts`    | Mounts every better-auth endpoint under `/api/auth/*`                      |
-| `src/db/schema/<dialect>-auth.ts` | Generated Drizzle tables: `user`, `session`, `account`, `verification` |
+| `src/db/schema/<dialect>-auth.ts` | Generated Drizzle tables: `user`, `session`, `account`, `verification`, `apikey` |
 | `src/db/client.server.ts`     | Lazy, dialect-aware Drizzle handle (`getDb()`)                             |
 
 Copy `.env.example` to `.env` and fill it in (`openssl rand -base64 32` for the secret),
@@ -409,6 +412,34 @@ Cross-references inside the documents ("… see section 7") are rendered by `<Re
 and numbered from the section order at render time. Never write the number by hand: an
 unknown id throws, but a stale number just points the reader at the wrong clause.
 
+### API keys
+
+An API key is what an MCP client authenticates with. Keys come from
+[`@better-auth/api-key`](https://better-auth.com/docs/plugins/api-key), which stores them
+hashed — the plaintext exists exactly once, in the reply to the call that created it, which
+is why the dashboard shows it once and says so.
+
+**One key per user.** The plugin will happily mint many; the limit is enforced in
+`src/lib/api-key.ts`, which deletes whatever exists before creating the replacement. That
+is also why issuing goes through a server function instead of `authClient.apiKey.create` in
+the browser — a client-side call would be a second, unconstrained way in. Deletion happens
+*first*: the other order leaves two working keys if the delete then fails, and a user who
+has been told their old key was replaced has no reason to suspect it still opens the door.
+
+Two settings are worth knowing about, both in `src/lib/api-key-config.ts`:
+
+- **`API_KEY_RATE_LIMIT`.** The plugin's own default is 10 verifications per *day*, which a
+  single agent conversation exhausts. This app sets 120 per minute. The values are copied
+  onto each key row when it is issued, so changing them only affects keys created
+  afterwards.
+- **`API_KEY_PREFIX`.** Every key starts with `ghc_`, so a secret scanner — or a human
+  reading a leaked log line — can recognise one.
+
+`enableSessionForAPIKeys` is deliberately left off. With it on, any request carrying
+`x-api-key` would be handed a full mocked session, and a key meant for `/mcp` could drive
+every other auth endpoint too. `/mcp` verifies the key explicitly instead and gets back the
+user id it needs.
+
 ## MCP server
 
 `POST /mcp` speaks the [Model Context Protocol](https://modelcontextprotocol.io) over its
@@ -419,25 +450,56 @@ two-file change.
 | File                           | Role                                                              |
 | ------------------------------ | ----------------------------------------------------------------- |
 | `src/lib/mcp/hello.ts`         | Domain logic — plain functions, no MCP or HTTP types                |
-| `src/lib/mcp/server.ts`        | `createMcpServer()` — which tools, resources and prompts are exposed |
+| `src/lib/mcp/server.ts`        | `createMcpServer(identity)` — which tools and resources are exposed, and who may invoke them |
+| `src/lib/mcp/auth.server.ts`   | Who is calling: pulls the API key off the request and verifies it   |
 | `src/lib/mcp/handler.server.ts` | `Request` → `Response` bridge: transport, logging, teardown        |
+| `src/lib/mcp/endpoint.ts`      | The endpoint's absolute URL, for the dashboard's copy-paste snippet |
 | `src/routes/mcp.ts`            | The route itself                                                   |
+
+### Who may do what
+
+Discovery is open, invocation is not. That split is the point: a client can connect,
+`initialize` and list the tools without holding anything, because that is how a user
+decides whether a key is worth getting. Calling a tool or reading a resource needs one.
+
+| Request                            | No key                             | Valid key | Bad key |
+| ---------------------------------- | ---------------------------------- | --------- | ------- |
+| `initialize`, `tools/list`, `resources/list` | works                    | works     | `401`   |
+| `tools/call`                       | result with `isError: true`        | works     | `401`   |
+| `resources/read`                   | JSON-RPC error `-32600`            | works     | `401`   |
+
+Three states, not two. A request carrying *no* credential is anonymous and proceeds; one
+carrying a credential that does not check out is rejected with `401` and
+`WWW-Authenticate: Bearer`. Quietly demoting a bad key to anonymous would turn a typo — or
+an expired key, or one the user just revoked — into a client that appears to work until the
+first tool call comes back refusing to run.
+
+The refusal a tool returns is in-band (`isError: true`) rather than a JSON-RPC error,
+because the protocol reserves those for a call that could not be *understood* and keeps
+failures of the call itself in the result, where the model can read the message and tell
+its user to go get a key. A resource read has no in-band error channel, so that one is a
+protocol error.
+
+The key travels in `Authorization: Bearer <key>` — the header MCP clients can set without
+extra configuration — or in `x-api-key`, which is better-auth's own default and what a
+`curl` example reaches for. See [API keys](#api-keys) for where keys come from.
+
+```sh
+claude mcp add --transport http ghealth http://localhost:3000/mcp \
+  --header "Authorization: Bearer $GHEALTH_API_KEY"
+```
 
 The identity a client sees during `initialize` — `title` and `websiteUrl` — is read from
 `LEGAL` in `src/lib/legal.ts`, so renaming the product reaches the MCP client list too
 rather than leaving a stale name behind.
 
-Register a client against a running app:
-
-```sh
-claude mcp add --transport http hello http://localhost:3000/mcp
-```
-
-Or exercise it by hand. The Streamable HTTP spec requires the client to accept **both**
-content types, so an `Accept: application/json` alone is answered with `406`:
+Exercise it by hand. The Streamable HTTP spec requires the client to accept **both**
+content types, so an `Accept: application/json` alone is answered with `406`. Drop the
+`Authorization` header and the same call comes back refusing to run:
 
 ```sh
 curl -s http://localhost:3000/mcp \
+  -H "Authorization: Bearer $GHEALTH_API_KEY" \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"say_hello","arguments":{"name":"Bestony"}}}'

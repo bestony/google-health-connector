@@ -1,6 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { isLevelEnabled } from "../env.server";
 import { createLogger } from "../logger.server";
+import { authenticateMcpRequest, type McpIdentity } from "./auth.server";
 import { createMcpServer } from "./server";
 
 /**
@@ -14,12 +15,22 @@ import { createMcpServer } from "./server";
  * SDK enforces this (a stateless transport throws if reused), and it is also
  * what makes the route safe on a serverless host, where consecutive requests
  * routinely land on different instances.
+ *
+ * Authentication happens here, before any of that: a bad key is refused at the
+ * HTTP layer, while a request with no key is passed through as anonymous and
+ * left to `server.ts` to allow or refuse per operation.
  */
 
 const log = createLogger("mcp:handler");
 
 /** JSON-RPC internal error, per the spec's reserved code range. */
 const INTERNAL_ERROR = -32603;
+
+/** JSON-RPC "server error" code, the reserved range for implementation-defined faults. */
+const UNAUTHORIZED_ERROR = -32001;
+
+/** Nobody presented a credential. Discovery is open; invocation is not. */
+const ANONYMOUS: McpIdentity = { authenticated: false };
 
 /**
  * Build a JSON-RPC error response.
@@ -75,7 +86,25 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
 
 	log.debug("request", { method: request.method, rpc: methods ?? null });
 
-	const server = createMcpServer();
+	const auth = await authenticateMcpRequest(request);
+
+	if (auth.outcome === "rejected") {
+		// A credential was presented and it did not check out. `WWW-Authenticate`
+		// is what tells a client this is about the credential rather than about
+		// the request, which is the difference between "fix your key" and an
+		// afternoon spent reading the tool's arguments.
+		log.warn("unauthorized", {
+			rpc: methods ?? null,
+			code: auth.failure.code,
+		});
+		return jsonRpcErrorResponse(401, UNAUTHORIZED_ERROR, auth.failure.message, {
+			"WWW-Authenticate": 'Bearer realm="mcp"',
+		});
+	}
+
+	const identity = auth.outcome === "authenticated" ? auth.identity : ANONYMOUS;
+
+	const server = createMcpServer(identity);
 	const transport = new WebStandardStreamableHTTPServerTransport({
 		// Stateless mode. The trade-off is that server-initiated traffic
 		// (sampling, elicitation, subscriptions) is unavailable — none of which
@@ -99,6 +128,7 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
 		const response = await transport.handleRequest(request);
 		log.debug("response", {
 			rpc: methods ?? null,
+			userId: identity.authenticated ? identity.userId : null,
 			status: response.status,
 			durationMs: Math.round(performance.now() - startedAt),
 		});

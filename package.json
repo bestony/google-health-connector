@@ -26,6 +26,7 @@
     "auth:generate:mysql": "DATABASE_URL=mysql://generate@localhost/generate auth generate --config auth.config.ts --output src/db/schema/mysql-auth.ts -y"
   },
   "dependencies": {
+    "@better-auth/api-key": "^1.6.26",
     "@fontsource-variable/google-sans": "^5.3.1",
     "@fontsource-variable/roboto-mono": "^5.3.0",
     "@fontsource-variable/roboto-serif": "^5.3.0",

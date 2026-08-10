@@ -1,3 +1,4 @@
+import { apiKey } from "@better-auth/api-key";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { oneTap } from "better-auth/plugins";
@@ -5,6 +6,7 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getDb } from "../db/client.server";
 import type { DatabaseDialect } from "../db/dialect";
 import { getSchema } from "../db/schema";
+import { API_KEY_PREFIX, API_KEY_RATE_LIMIT } from "./api-key-config";
 import {
 	getAuthBaseUrl,
 	getAuthSecret,
@@ -154,6 +156,24 @@ function createAuth() {
 		},
 
 		plugins: [
+			// API keys, which are what an MCP client authenticates with. Keys are
+			// stored hashed, so the plaintext exists exactly once — in the response
+			// to the call that created it — and the dashboard says so.
+			//
+			// `enableSessionForAPIKeys` is left off (its default): with it on, any
+			// request carrying `x-api-key` would be handed a full mocked session,
+			// which would let a key meant for `/mcp` drive every other auth endpoint
+			// as well. Nothing here needs that — `/mcp` verifies the key explicitly
+			// and gets back the user id it needs.
+			apiKey({
+				defaultPrefix: API_KEY_PREFIX,
+				rateLimit: {
+					enabled: true,
+					timeWindow: API_KEY_RATE_LIMIT.timeWindow,
+					maxRequests: API_KEY_RATE_LIMIT.maxRequests,
+				},
+			}),
+
 			// Google One Tap: `POST /api/auth/one-tap/callback` trades the ID token
 			// the browser gets from Google Identity Services for a session, with no
 			// redirect round trip. It reuses `socialProviders.google.clientId` as

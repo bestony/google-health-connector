@@ -1,6 +1,7 @@
 import {
 	boolean,
 	index,
+	int,
 	mysqlTable,
 	text,
 	timestamp,
@@ -97,4 +98,39 @@ export const verification = mysqlTable(
 			.notNull(),
 	},
 	(table) => [index("verification_identifier_idx").on(table.identifier)],
+);
+
+export const apikey = mysqlTable(
+	"apikey",
+	{
+		id: varchar("id", { length: 36 }).primaryKey(),
+		configId: varchar("config_id", { length: 255 })
+			.default("default")
+			.notNull(),
+		name: text("name"),
+		start: text("start"),
+		referenceId: varchar("reference_id", { length: 255 }).notNull(),
+		prefix: text("prefix"),
+		key: varchar("key", { length: 255 }).notNull(),
+		refillInterval: int("refill_interval"),
+		refillAmount: int("refill_amount"),
+		lastRefillAt: timestamp("last_refill_at", { fsp: 3 }),
+		enabled: boolean("enabled").default(true),
+		rateLimitEnabled: boolean("rate_limit_enabled").default(true),
+		rateLimitTimeWindow: int("rate_limit_time_window").default(60000),
+		rateLimitMax: int("rate_limit_max").default(120),
+		requestCount: int("request_count").default(0),
+		remaining: int("remaining"),
+		lastRequest: timestamp("last_request", { fsp: 3 }),
+		expiresAt: timestamp("expires_at", { fsp: 3 }),
+		createdAt: timestamp("created_at", { fsp: 3 }).notNull(),
+		updatedAt: timestamp("updated_at", { fsp: 3 }).notNull(),
+		permissions: text("permissions"),
+		metadata: text("metadata"),
+	},
+	(table) => [
+		index("apikey_configId_idx").on(table.configId),
+		index("apikey_referenceId_idx").on(table.referenceId),
+		index("apikey_key_idx").on(table.key),
+	],
 );
