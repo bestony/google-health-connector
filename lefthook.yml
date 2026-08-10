@@ -1,0 +1,21 @@
+# Git hooks, installed by `lefthook install` (wired to `pnpm install` via the
+# `prepare` script). Skip once with `LEFTHOOK=0 git commit` / `git push --no-verify`.
+
+pre-commit:
+  commands:
+    biome:
+      # Lint + format + organize imports on the staged files only; safe fixes
+      # are written back and re-staged so the commit contains the fixed code.
+      glob: "*.{js,jsx,ts,tsx,json,jsonc,css,html}"
+      run: pnpm exec biome check --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+
+pre-push:
+  commands:
+    check:
+      # Full-repo gate: biome lint + format + import order (`pnpm check`).
+      run: pnpm check
+    typecheck:
+      run: pnpm exec tsc --noEmit
+    test:
+      run: pnpm test

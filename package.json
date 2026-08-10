@@ -15,6 +15,7 @@
     "format": "biome format",
     "lint": "biome lint",
     "check": "biome check",
+    "prepare": "lefthook install",
     "test": "node --import tsx --test src/lib/google-health-filter.test.ts src/lib/mcp/health.test.ts",
     "test:pushdb": "npx drizzle-kit push",
     "db:generate": "npx drizzle-kit generate",
@@ -66,6 +67,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "auth": "1.6.26",
     "drizzle-kit": "1.0.0-rc.4",
+    "lefthook": "^2.1.10",
     "tsx": "^4.23.11",
     "typescript": "^6.0.2",
     "vite": "^8.0.0"
@@ -73,6 +75,7 @@
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild",
+      "lefthook",
       "lightningcss"
     ]
   }
