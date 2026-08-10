@@ -103,14 +103,19 @@ function DashboardPage() {
 
 	// Which tab opens follows from where the user is in the setup: until every
 	// permission is granted the work to do is on the Google Health tab, and once
-	// it all is, the thing they came back for is the key. An OAuth error wins
-	// over both — it renders inside the Google Health card, and a default that
-	// hides it would read as a silent success.
+	// it all is, the thing they came back for is the key. Two arrivals win over
+	// that. An OAuth error renders inside the Google Health card, and a default
+	// that hides it would read as a silent success. And the load that just
+	// returned from Google's consent screen opens on the confirmation and the
+	// report of what was actually granted — the key is for every visit after.
+	const justAuthorized = search.health === "granted";
 	const allGranted =
 		health.status === "linked" &&
 		GOOGLE_HEALTH_SCOPES.every((scope) => health.grantedScopes.includes(scope));
 	const defaultTab =
-		oauthError === null && allGranted ? "api-key" : "google-health";
+		oauthError === null && allGranted && !justAuthorized
+			? "api-key"
+			: "google-health";
 
 	/**
 	 * Re-read the key after the card has created or revoked one.
@@ -183,7 +188,7 @@ function DashboardPage() {
 						callbackURL={HEALTH_CALLBACK_URL}
 						errorCallbackURL={HEALTH_ERROR_CALLBACK_URL}
 						error={oauthError}
-						justAuthorized={search.health === "granted"}
+						justAuthorized={justAuthorized}
 					/>
 				</TabsContent>
 				<TabsContent keepMounted value="api-key">
