@@ -12,7 +12,10 @@
     "preview": "vite preview",
     "format": "biome format",
     "lint": "biome lint",
-    "check": "biome check"
+    "check": "biome check",
+    "test:pushdb":"npx drizzle-kit push",
+    "db:generate":"npx drizzle-kit generate",
+    "db:migrate":"npx drizzle-kit migrate"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
