@@ -13,6 +13,7 @@ import {
 	getGoogleOAuthConfig,
 	getLogLevel,
 } from "./env.server";
+import { LEGAL } from "./legal";
 import { createLogger } from "./logger.server";
 
 /**
@@ -99,7 +100,10 @@ function createAuth() {
 	const google = googleProvider();
 
 	return betterAuth({
-		appName: "google-health-connector",
+		// The brand rather than the package name: better-auth hands this to
+		// anything that has to name the app to a user, so it should read the way
+		// the header and the legal documents do.
+		appName: LEGAL.appName,
 		baseURL,
 		secret: getAuthSecret(),
 

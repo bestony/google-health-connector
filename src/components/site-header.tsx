@@ -37,7 +37,7 @@ export function SiteHeader({ signedIn, showAction = true }: SiteHeaderProps) {
 		<header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-sm">
 			<div className="mx-auto flex max-w-5xl items-center justify-between gap-4 px-6 py-3 sm:px-8">
 				<Link
-					className="flex items-center gap-2.5 text-base font-semibold tracking-tight transition-opacity hover:opacity-80"
+					className="flex items-center gap-2.5 transition-opacity hover:opacity-80"
 					to="/"
 				>
 					{/* `alt` is empty on purpose: the wordmark beside it already says the
@@ -50,7 +50,18 @@ export function SiteHeader({ signedIn, showAction = true }: SiteHeaderProps) {
 						width={32}
 						height={32}
 					/>
-					{LEGAL.appName}
+					{/* The brand is stacked rather than set on one line: joined, it is
+					    wide enough to crowd the call to action off the right edge of a
+					    phone. Both halves are inside the link, so the accessible name is
+					    still the whole brand however it is laid out. */}
+					<span className="flex flex-col leading-tight">
+						<span className="text-base font-semibold tracking-tight">
+							{LEGAL.productName}
+						</span>
+						<span className="text-[0.6875rem] font-medium text-muted-foreground">
+							by {LEGAL.vendorName}
+						</span>
+					</span>
 				</Link>
 
 				{showAction &&

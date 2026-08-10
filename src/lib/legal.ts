@@ -17,9 +17,31 @@
  * and the server can use it.
  */
 
+/**
+ * The two halves of the brand.
+ *
+ * They exist as separate constants because the site header renders them as a
+ * stacked lockup — the product on one line, the publisher under it — while
+ * every other surface wants the two joined. Joining them happens once, in
+ * `appName` below, so no page can invent its own spelling of the lockup.
+ */
+const PRODUCT_NAME = "GHealth Connector";
+const VENDOR_NAME = "StillWarm.app";
+
 export const LEGAL = {
-	/** Product name, as it appears on the Google OAuth consent screen. */
-	appName: "GHealth Connector",
+	/** The product alone, without the publisher. Only the header wants this. */
+	productName: PRODUCT_NAME,
+	/** Who publishes the product. Also the domain it is served from. */
+	vendorName: VENDOR_NAME,
+	/**
+	 * The full brand: what the app calls itself in prose, in page titles and to
+	 * an MCP client.
+	 *
+	 * The Google OAuth consent screen is configured by hand in the Cloud Console
+	 * rather than from here, and verification review reads the two side by side —
+	 * so the name entered there has to stay identical to this one.
+	 */
+	appName: `${PRODUCT_NAME} by ${VENDOR_NAME}`,
 	/** Canonical origin. The policy URLs Google is given must live under it. */
 	siteUrl: "https://www.stillwarm.app",
 	/** Who operates the service, as it should read inside a sentence. */

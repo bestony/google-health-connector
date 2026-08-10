@@ -37,10 +37,12 @@ const log = createLogger("mcp:server");
  * hand, so bump both together.
  *
  * `name` is the programmatic identifier and `title` the display name. A client
- * older than the `title` field falls back to rendering `name`, so the two are
- * kept as the same brand rather than left to drift. Reading the display name
- * from `LEGAL` means a product rename stays one edit, in the one place the
- * Google consent screen and the legal documents already read from.
+ * older than the `title` field falls back to rendering `name`, which is why it
+ * is the slug form of the brand's product half rather than anything arbitrary:
+ * it has to be recognisable on its own, and an identifier is no place for the
+ * spaces of the full lockup. `title` carries that lockup, read from `LEGAL` so
+ * a rename stays one edit — in the one place the Google consent screen and the
+ * legal documents already read from.
  */
 export const MCP_SERVER_INFO = {
 	name: "ghealth-connector",
@@ -69,7 +71,7 @@ const GREETING_RESOURCE_URI = "hello://world";
 function unauthorizedMessage(): string {
 	const dashboard = `${getAuthBaseUrl().replace(/\/+$/, "")}/dashboard`;
 	return (
-		`This ${LEGAL.appName} MCP server requires an API key to invoke ` +
+		`This MCP server, ${LEGAL.appName}, requires an API key to invoke ` +
 		`anything. Generate one on the dashboard at ${dashboard}, then send it ` +
 		"with every request as `Authorization: Bearer <key>`."
 	);
