@@ -1,5 +1,5 @@
 {
-	"$schema": "https://biomejs.dev/schemas/2.2.4/schema.json",
+	"$schema": "https://biomejs.dev/schemas/2.4.5/schema.json",
 	"vcs": {
 		"enabled": false,
 		"clientKind": "git",
@@ -24,13 +24,156 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"recommended": true
+			"recommended": true,
+			"complexity": {
+				"noExcessiveCognitiveComplexity": {
+					"level": "warn",
+					"options": { "maxAllowedComplexity": 15 }
+				},
+				"noExcessiveLinesPerFunction": "warn",
+				"noForEach": "error",
+				"noImplicitCoercions": "error",
+				"noUselessStringConcat": "error",
+				"noUselessUndefinedInitialization": "error",
+				"useMaxParams": "error",
+				"useSimplifiedLogicExpression": "error"
+			},
+			"correctness": {
+				"noConstantMathMinMaxClamp": "error",
+				"noPrivateImports": "error",
+				"noUndeclaredVariables": "error",
+				"noUnusedFunctionParameters": "error",
+				"noUnusedImports": "error",
+				"noUnusedPrivateClassMembers": "error",
+				"noUnusedVariables": "error",
+				"useHookAtTopLevel": "error"
+			},
+			"nursery": {
+				"noEqualsToNull": "error",
+				"noExcessiveClassesPerFile": "error",
+				"noExcessiveLinesPerFile": "warn",
+				"noFloatingPromises": "error",
+				"noForIn": "error",
+				"noMisusedPromises": "error",
+				"noMultiAssign": "error",
+				"noNestedPromises": "error",
+				"noReturnAssign": "error",
+				"noShadow": "warn",
+				"noUnnecessaryConditions": "error",
+				"noUselessReturn": "error",
+				"useAwaitThenable": "warn",
+				"useErrorCause": "warn",
+				"useExhaustiveSwitchCases": "error",
+				"useNullishCoalescing": "warn"
+			},
+			"performance": {
+				"noAwaitInLoops": "warn",
+				"noBarrelFile": "error",
+				"noDynamicNamespaceImportAccess": "error",
+				"noNamespaceImport": "error",
+				"noReExportAll": "error",
+				"useTopLevelRegex": "warn"
+			},
+			"style": {
+				"noCommonJs": "error",
+				"noEnum": "error",
+				"noExportedImports": "warn",
+				"noNamespace": "error",
+				"noNegationElse": "error",
+				"noNestedTernary": "warn",
+				"noNonNullAssertion": "error",
+				"noParameterAssign": "error",
+				"noProcessEnv": "error",
+				"noShoutyConstants": "error",
+				"noSubstr": "error",
+				"noUselessElse": "error",
+				"noYodaExpression": "error",
+				"useArrayLiterals": "error",
+				"useAsConstAssertion": "error",
+				"useAtIndex": "error",
+				"useCollapsedElseIf": "error",
+				"useCollapsedIf": "error",
+				"useConsistentArrayType": "error",
+				"useConsistentBuiltinInstantiation": "error",
+				"useConsistentCurlyBraces": "error",
+				"useDefaultParameterLast": "error",
+				"useExplicitLengthCheck": "error",
+				"useExponentiationOperator": "error",
+				"useForOf": "error",
+				"useFragmentSyntax": "error",
+				"useNodejsImportProtocol": "error",
+				"useNumberNamespace": "error",
+				"useObjectSpread": "error",
+				"useReadonlyClassProperties": "error",
+				"useShorthandAssign": "error",
+				"useSingleVarDeclarator": "error",
+				"useTemplate": "error",
+				"useThrowNewError": "error",
+				"useThrowOnlyError": "error",
+				"useTrimStartEnd": "error"
+			},
+			"suspicious": {
+				"noAlert": "error",
+				"noBitwiseOperators": "error",
+				"noConsole": "error",
+				"noConstantBinaryExpressions": "error",
+				"noDeprecatedImports": "error",
+				"noEmptyBlockStatements": "error",
+				"noEvolvingTypes": "error",
+				"noImportCycles": "error",
+				"noReactForwardRef": "error",
+				"noTsIgnore": "error",
+				"noUnassignedVariables": "error",
+				"useAdjacentOverloadSignatures": "error",
+				"useErrorMessage": "error",
+				"useGuardForIn": "error",
+				"useIterableCallbackReturn": "error",
+				"useNumberToFixedDigitsArgument": "error",
+				"useStaticResponseMethods": "error"
+			}
 		}
 	},
 	"javascript": {
 		"formatter": {
 			"quoteStyle": "double"
 		}
-	}
+	},
+	"overrides": [
+		{
+			"includes": [
+				"**/src/lib/google-health-api.gen.ts",
+				"**/src/db/schema/*-auth.ts"
+			],
+			"linter": { "enabled": false }
+		},
+		{
+			"includes": [
+				"**/src/lib/logger.server.ts",
+				"**/src/lib/logger-client.ts"
+			],
+			"linter": { "rules": { "suspicious": { "noConsole": "off" } } }
+		},
+		{
+			"includes": ["**/src/lib/env.server.ts"],
+			"linter": { "rules": { "style": { "noProcessEnv": "off" } } }
+		},
+		{
+			"includes": ["**/src/db/schema/*.ts"],
+			"linter": {
+				"rules": {
+					"performance": {
+						"noBarrelFile": "off",
+						"noNamespaceImport": "off",
+						"noReExportAll": "off"
+					}
+				}
+			}
+		},
+		{
+			"includes": ["**/src/integrations/**"],
+			"linter": {
+				"rules": { "suspicious": { "noEmptyBlockStatements": "off" } }
+			}
+		}
+	]
 }
-
