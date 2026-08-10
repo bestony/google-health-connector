@@ -80,6 +80,17 @@ export interface DataPointSummary {
 	name?: string;
 }
 
+/**
+ * The fields that can carry a measurement inside Google's `DataPoint` union.
+ *
+ * `dataSource` is also an object on every point, but it is envelope metadata,
+ * not the measurement. Deriving this set from the generated catalog keeps the
+ * distinction aligned with Google's discovery document as data types change.
+ */
+const DATA_POINT_PAYLOAD_FIELDS = new Set(
+	GOOGLE_HEALTH_DATA_POINT_TYPES.map((dataType) => dataType.field),
+);
+
 /** `{ year: 2026, month: 8, day: 10 }` → `2026-08-10`. */
 function formatDate(date: unknown): string | undefined {
 	if (typeof date !== "object" || date === null) return undefined;
@@ -97,11 +108,12 @@ function formatDate(date: unknown): string | undefined {
 /**
  * Flattens a `DataPoint` to its type, its time and its measurement.
  *
- * A `DataPoint` is a union of forty optional members, of which exactly one is
- * set, and the set one nests its time under `interval`, `sampleTime` or `date`
- * depending on which it is. Serialising that verbatim spends most of a context
- * window on nulls and envelope — a day of heart-rate samples is thousands of
- * points — and leaves the model to work out the shape before it can answer.
+ * A `DataPoint` is a union of forty optional payload members, of which exactly
+ * one is set, plus envelope fields such as `name` and `dataSource`. The payload
+ * nests its time under `interval`, `sampleTime` or `date` depending on which it
+ * is. Serialising that verbatim spends most of a context window on envelope —
+ * a day of heart-rate samples is thousands of points — and leaves the model to
+ * work out the shape before it can answer.
  *
  * The measurement is passed through rather than mapped per type: forty
  * hand-written extractors would be forty things to keep in step with Google,
@@ -111,7 +123,9 @@ function formatDate(date: unknown): string | undefined {
 export function summarizeDataPoint(point: DataPoint): DataPointSummary | null {
 	const entry = Object.entries(point).find(
 		([key, value]) =>
-			key !== "name" && typeof value === "object" && value !== null,
+			DATA_POINT_PAYLOAD_FIELDS.has(key) &&
+			typeof value === "object" &&
+			value !== null,
 	);
 	if (!entry) return null;
 
