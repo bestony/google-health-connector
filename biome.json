@@ -11,10 +11,13 @@
 			"**/src/**/*",
 			"**/scripts/**/*",
 			"**/.vscode/**/*",
-			"**/index.html",
 			"**/vite.config.ts",
 			"**/drizzle.config.ts",
 			"**/auth.config.ts",
+			"package.json",
+			"tsconfig.json",
+			"tsr.config.json",
+			"vercel.json",
 			"!**/src/routeTree.gen.ts",
 			"!**/src/styles.css"
 		]
@@ -38,12 +41,14 @@
 				"noImplicitCoercions": "error",
 				"noUselessStringConcat": "error",
 				"noUselessUndefinedInitialization": "error",
+				"useDateNow": "error",
 				"useMaxParams": "error",
 				"useSimplifiedLogicExpression": "error"
 			},
 			"correctness": {
 				"noConstantMathMinMaxClamp": "error",
 				"noPrivateImports": "error",
+				"noUndeclaredDependencies": "error",
 				"noUndeclaredVariables": "error",
 				"noUnusedFunctionParameters": "error",
 				"noUnusedImports": "error",
@@ -125,6 +130,7 @@
 				"noEvolvingTypes": "error",
 				"noImportCycles": "error",
 				"noReactForwardRef": "error",
+				"noSkippedTests": "error",
 				"noTsIgnore": "error",
 				"noUnassignedVariables": "error",
 				"useAdjacentOverloadSignatures": "error",
