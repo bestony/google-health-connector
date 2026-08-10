@@ -1,4 +1,9 @@
-import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
+import {
+	createFileRoute,
+	Link,
+	redirect,
+	useRouter,
+} from "@tanstack/react-router";
 import { useState } from "react";
 import { GoogleOneTap } from "../components/google-one-tap";
 import { GoogleSignInButton } from "../components/google-sign-in-button";
@@ -281,6 +286,22 @@ function LoginPage() {
 					? "Need an account? Sign up"
 					: "Already registered? Sign in"}
 			</button>
+
+			{/* The moment consent is actually given, so the notice belongs here and
+			    not only in the site footer: signing in is what forms the agreement,
+			    and Google's OAuth review looks for both documents to be reachable
+			    from the screen that starts the flow. */}
+			<p className="mt-6 border-t border-border pt-4 text-xs text-muted-foreground">
+				By continuing you agree to our{" "}
+				<Link className="underline" to="/terms">
+					Terms of Service
+				</Link>{" "}
+				and{" "}
+				<Link className="underline" to="/privacy">
+					Privacy Policy
+				</Link>
+				.
+			</p>
 		</div>
 	);
 }
