@@ -16,6 +16,16 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* State selectors for Base UI primitives, spelled the way shadcn/ui's
+ * components use them (`data-active:`, `group-data-horizontal/tabs:`).
+ * Tailwind's built-in `data-*` shorthand only matches attribute *presence*,
+ * and Base UI writes orientation as `data-orientation="…"` — so without these
+ * the orientation-dependent classes match nothing. Definitions are verbatim
+ * from `shadcn/tailwind.css`. */
+@custom-variant data-active (&:where([data-state="active"]), &:where([data-active]:not([data-active="false"])));
+@custom-variant data-horizontal (&:where([data-orientation="horizontal"]));
+@custom-variant data-vertical (&:where([data-orientation="vertical"]));
+
 :root {
   --background: oklch(1.0000 0 0);
   --foreground: oklch(0.2479 0.0058 271.1764);

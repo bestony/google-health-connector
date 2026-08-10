@@ -86,7 +86,7 @@ export function GoogleHealthAuthorization({
 	}
 
 	return (
-		<section className="mt-8 rounded-lg border border-border bg-card p-6 shadow-xs">
+		<section className="rounded-lg border border-border bg-card p-6 shadow-xs">
 			<header className="flex flex-wrap items-baseline justify-between gap-2">
 				<h2 className="text-lg font-semibold">Google Health</h2>
 				<StatusBadge access={access} grantedCount={grantedCount} />
