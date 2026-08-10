@@ -13,7 +13,6 @@ import {
 	sanitizeOAuthErrorParam,
 } from "../lib/auth-errors";
 import { socialProvidersQueryOptions } from "../lib/auth-providers";
-import { SESSION_QUERY_KEY } from "../lib/session";
 
 /**
  * Demo sign-in / sign-up screen for the email + password and Google providers.
@@ -112,9 +111,20 @@ function LoginPage() {
 	 * Shared by every flow that signs in without a full page load — the email
 	 * form and Google One Tap. The cookie changed underneath the cached session,
 	 * so it is dropped before the router re-runs `beforeLoad` with the new one.
+	 *
+	 * Dropped, not invalidated. Invalidation marks a query stale and refetches
+	 * the ones something is observing, and nothing observes this one: the root
+	 * route reads it through `ensureQueryData`, which returns whatever is cached
+	 * without caring that it went stale. The cached value here is the `null`
+	 * from before signing in, so `beforeLoad` would re-run, still see no
+	 * session, and `/dashboard` would bounce straight back to this page.
+	 *
+	 * The whole cache goes, not just the session entry: whoever was signed in
+	 * before may have left per-user answers behind, and this navigation is the
+	 * moment they would be read back as the new user's.
 	 */
 	async function completeSignIn() {
-		await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY });
+		queryClient.clear();
 		await router.invalidate();
 		await router.navigate({ to: search.redirect ?? "/dashboard" });
 	}

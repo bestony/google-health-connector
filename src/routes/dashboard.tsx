@@ -11,7 +11,6 @@ import {
 import { googleHealthAccessQueryOptions } from "../lib/google-health-access";
 import { mcpEndpointQueryOptions } from "../lib/mcp/endpoint";
 import { preventSilentAccess } from "../lib/one-tap-client";
-import { SESSION_QUERY_KEY } from "../lib/session";
 
 /**
  * Demo route protected by the better-auth session.
@@ -119,7 +118,16 @@ function DashboardPage() {
 		// `/login` can hand the session straight back.
 		await preventSilentAccess();
 
-		await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY });
+		// The whole cache, not just the session. Every entry in it was fetched as
+		// the user who is leaving — their key, their Google grants — and the next
+		// person to sign in on this tab does so without a page load, so anything
+		// left behind would be read back as theirs.
+		//
+		// Cleared rather than invalidated, too: nothing observes these queries,
+		// and invalidation only refetches what is observed. The loaders read them
+		// through `ensureQueryData`, which returns whatever is cached without
+		// caring that it went stale.
+		queryClient.clear();
 		await router.invalidate();
 		await router.navigate({ to: "/login", search: { redirect: undefined } });
 	}
