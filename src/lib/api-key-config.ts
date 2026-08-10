@@ -20,7 +20,7 @@
 export const API_KEY_PREFIX = "ghc_";
 
 /**
- * How often one key may be verified — 100 queries per second.
+ * How often one key may be verified — 10000 queries per second.
  *
  * The plugin's own default is 10 requests per *day*, which a single agent
  * conversation exhausts — so this is set explicitly rather than inherited. The
@@ -42,7 +42,7 @@ export const API_KEY_RATE_LIMIT = {
 	/** Length of the window, in milliseconds. */
 	timeWindow: 1_000,
 	/** Verifications allowed inside one window. */
-	maxRequests: 100,
+	maxRequests: 10000,
 } as const;
 
 /**
