@@ -17,6 +17,50 @@ To build this application for production:
 pnpm build
 ```
 
+## Authentication
+
+Authentication is handled by [better-auth](https://better-auth.com), persisted through
+[Drizzle ORM](https://orm.drizzle.team) on libSQL/SQLite.
+
+| File                        | Role                                                                    |
+| --------------------------- | ----------------------------------------------------------------------- |
+| `src/lib/auth.server.ts`    | better-auth instance (`getAuth()`), Drizzle adapter, plugins — server only |
+| `src/lib/auth-client.ts`    | Browser client (`signIn`, `signUp`, `signOut`, `useSession`)             |
+| `src/lib/session.ts`        | `fetchSession` server function + `sessionQueryOptions()` cache entry     |
+| `src/routes/api/auth/$.ts`  | Mounts every better-auth endpoint under `/api/auth/*`                    |
+| `src/db/auth-schema.ts`     | Generated Drizzle tables: `user`, `session`, `account`, `verification`   |
+| `src/db/client.server.ts`   | Lazy Drizzle/libSQL client (`getDb()`)                                   |
+
+Copy `.env.example` to `.env` and fill it in (`openssl rand -base64 32` for the secret),
+then create the tables:
+
+```bash
+pnpm test:pushdb   # drizzle-kit push — fastest for local development
+
+# or, when you want a reviewable migration history:
+pnpm db:generate   # write a migration to ./drizzle
+pnpm db:migrate    # apply it
+```
+
+The root route resolves the session in `beforeLoad` and puts it on the router context, so
+any route can guard itself without an extra round trip:
+
+```tsx
+export const Route = createFileRoute('/dashboard')({
+  beforeLoad: ({ context, location }) => {
+    if (!context.session) {
+      throw redirect({ to: '/login', search: { redirect: location.href } })
+    }
+  },
+})
+```
+
+`/login` and `/dashboard` are working demos of that flow — restyle or delete them freely.
+
+After changing the better-auth config (new plugins, `additionalFields`, …), regenerate the
+tables with `pnpm auth:generate`. The generator still emits legacy `relations()` helpers
+that drizzle-orm 1.x removed; delete those blocks from `src/db/auth-schema.ts` afterwards.
+
 ## Styling
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.

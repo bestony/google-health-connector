@@ -13,9 +13,10 @@
     "format": "biome format",
     "lint": "biome lint",
     "check": "biome check",
-    "test:pushdb":"npx drizzle-kit push",
-    "db:generate":"npx drizzle-kit generate",
-    "db:migrate":"npx drizzle-kit migrate"
+    "test:pushdb": "npx drizzle-kit push",
+    "db:generate": "npx drizzle-kit generate",
+    "db:migrate": "npx drizzle-kit migrate",
+    "auth:generate": "auth generate --config auth.config.ts --output src/db/auth-schema.ts"
   },
   "dependencies": {
     "@libsql/client": "^0.17.4",
@@ -27,6 +28,7 @@
     "@tanstack/react-router-devtools": "latest",
     "@tanstack/react-router-ssr-query": "latest",
     "@tanstack/react-start": "latest",
+    "better-auth": "^1.6.26",
     "dotenv": "^17.4.2",
     "drizzle-orm": "1.0.0-rc.4",
     "nitro": "3.0.260610-beta",
@@ -42,6 +44,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^6.0.1",
+    "auth": "1.6.26",
     "drizzle-kit": "1.0.0-rc.4",
     "tsx": "^4.23.11",
     "typescript": "^6.0.2",
