@@ -28,15 +28,20 @@ export const API_KEY_PREFIX = "ghc_";
  * use.
  *
  * The window is expressed as one second rather than as an equivalent average
- * over a longer one (6000 per minute is also "100 QPS") because the plugin
+ * over a longer one (600000 per minute is also "10000 QPS") because the plugin
  * resets a key's counter only once a full window has passed *since its last
  * request*: a wide window turns a burst into a cooldown of that same width,
  * while a one-second window caps the instantaneous rate and lets a client that
  * overruns it recover after a one-second pause.
  *
- * These values are copied onto each key row when it is issued, so changing them
- * only affects keys created afterwards. Existing keys keep the limit they were
- * born with until they are regenerated.
+ * These values are copied onto each key row when it is issued, and verification
+ * reads them back *off the row* — the plugin config is consulted only for
+ * `enabled`. So editing them here does nothing to keys that already exist, and
+ * regenerating the schema only moves the column DEFAULT, which applies to
+ * inserts alone. Changing the ceiling for keys already in the field takes a data
+ * migration: `drizzle/<dialect>/20260810102346_backfill_api_key_rate_limit` is
+ * the one written when the original 60s/120 ceiling turned out to strand live
+ * MCP sessions on a 401.
  */
 export const API_KEY_RATE_LIMIT = {
 	/** Length of the window, in milliseconds. */
