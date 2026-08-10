@@ -103,17 +103,15 @@ function DashboardPage() {
 		<div className="p-8">
 			<h1 className="text-2xl font-bold">Dashboard</h1>
 
+			{/* Only what identifies the account to its owner. The user id, the
+			    verification flag and the session expiry were debugging output from
+			    the auth scaffold: they tell the person reading them nothing they can
+			    act on, and the id is a value worth not putting on screen at all. */}
 			<dl className="mt-4 grid grid-cols-[8rem_1fr] gap-y-1 text-sm">
-				<dt className="font-medium">User ID</dt>
-				<dd>{session.user.id}</dd>
 				<dt className="font-medium">Name</dt>
 				<dd>{session.user.name}</dd>
 				<dt className="font-medium">Email</dt>
 				<dd>{session.user.email}</dd>
-				<dt className="font-medium">Email verified</dt>
-				<dd>{String(session.user.emailVerified)}</dd>
-				<dt className="font-medium">Session expires</dt>
-				<dd>{new Date(session.session.expiresAt).toISOString()}</dd>
 			</dl>
 
 			<GoogleHealthAuthorization
