@@ -127,9 +127,9 @@ const SECTIONS: readonly LegalSection[] = [
 						We do not use your health data to train machine learning models.
 					</li>
 					<li>
-						If you subscribe to a paid plan, our payment processor handles the
-						card details — we never see them — and your health data is no part
-						of the payment.
+						If you subscribe to a paid plan, {LEGAL.paymentProcessor} handles
+						the card details — they never reach our servers — and your health
+						data is no part of the payment.
 					</li>
 				</Bullets>
 			</>
@@ -230,17 +230,18 @@ const SECTIONS: readonly LegalSection[] = [
 
 				<Subheading>e. Billing information</Subheading>
 				<Para>
-					If you subscribe to a paid plan, our payment processor collects your
-					payment details and takes the payment. We never receive or store your
-					full card number and have no way to see it. What we hold is your plan,
-					your billing period and its renewal date, the processor's customer and
-					transaction references, and the invoices we are required to keep. If
-					you only ever use the free plan, none of this exists.
+					If you subscribe to a paid plan, {LEGAL.paymentProcessor} collects
+					your payment details and takes the payment. Your card number is
+					entered with them and stored by them; it does not pass through our
+					servers and we have no way to see it. What we hold is your plan, your
+					billing period and its renewal date, {LEGAL.paymentProcessor}'s
+					customer and transaction references, and the invoices we are required
+					to keep. If you only ever use the free plan, none of this exists.
 				</Para>
 				<Para>
-					Your health data is never part of a payment. The processor receives
-					what it needs to charge you — an account identifier, an email address
-					and an amount — and nothing about what is in your account.
+					Your health data is never part of a payment. {LEGAL.paymentProcessor}{" "}
+					receives what it needs to charge you — an account identifier, an email
+					address and an amount — and nothing about what is in your account.
 				</Para>
 
 				<Subheading>f. What we do not collect</Subheading>
@@ -464,11 +465,13 @@ const SECTIONS: readonly LegalSection[] = [
 						use it for their own purposes.
 					</li>
 					<li>
-						<strong>Our payment processor</strong> — only if you subscribe, and
-						only what is needed to charge you: an account identifier, an email
-						address and an amount. It never receives your health data. It is a
-						processor acting on our instructions, and it holds the card details
-						we deliberately never touch.
+						<strong>{LEGAL.paymentProcessor}</strong>, our payment processor —
+						only if you subscribe, and only what is needed to charge you: an
+						account identifier, an email address and an amount. It never
+						receives your health data. It acts on our instructions, and it is
+						where your card details live: they are entered with{" "}
+						{LEGAL.paymentProcessor} and stored by {LEGAL.paymentProcessor},
+						never on our servers.
 					</li>
 					<li>
 						<strong>Legal compulsion</strong> — where we are required to

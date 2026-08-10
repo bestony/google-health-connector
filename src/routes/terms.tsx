@@ -382,10 +382,12 @@ const SECTIONS: readonly LegalSection[] = [
 
 				<Subheading>c. How the payment is taken</Subheading>
 				<Para>
-					Payments are handled by our payment processor. We never receive or
-					store your full card number and have no way to see it. What we keep is
-					your plan, your billing period, the processor's transaction references
-					and the invoices we are required to retain — described in our{" "}
+					Payments are handled by {LEGAL.paymentProcessor}. Your card details go
+					to them and never reach our servers — we cannot see your card number,
+					which is deliberate: what we never hold cannot leak from us. What we
+					do keep is your plan, your billing period, {LEGAL.paymentProcessor}'s
+					transaction references and the invoices we are required to retain —
+					described in our{" "}
 					<Link
 						className="text-primary underline underline-offset-2"
 						to="/privacy"
@@ -537,10 +539,10 @@ const SECTIONS: readonly LegalSection[] = [
 		body: (
 			<Para>
 				The Service depends on third parties — Google above all, plus hosting
-				and infrastructure providers, and any MCP client you connect. We do not
-				control them, we do not endorse them, and we are not responsible for
-				their acts, omissions, availability, or terms. Your relationship with
-				each of them is your own.
+				and infrastructure providers, {LEGAL.paymentProcessor} for payments, and
+				any MCP client you connect. We do not control them, we do not endorse
+				them, and we are not responsible for their acts, omissions,
+				availability, or terms. Your relationship with each of them is your own.
 			</Para>
 		),
 	},

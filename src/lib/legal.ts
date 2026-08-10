@@ -52,6 +52,16 @@ export const LEGAL = {
 	operatorLocation: "the People's Republic of China (Mainland China)",
 	/** Address for privacy questions, data exports and deletion requests. */
 	contactEmail: "bestony@linux.com",
+	/**
+	 * Who takes the money.
+	 *
+	 * Named rather than described as "our payment processor", because both a
+	 * GDPR recipient disclosure and Google's OAuth review expect a name they can
+	 * check. It has to match the entity a customer sees on their card statement:
+	 * a charge from a name the policy never mentions is what a chargeback is
+	 * made of.
+	 */
+	paymentProcessor: "Waffo Pancake",
 	/** When the current text takes effect. */
 	effectiveDate: "August 10, 2026",
 	/** When the current text was last changed. */
