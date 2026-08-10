@@ -18,4 +18,5 @@ pre-push:
     typecheck:
       run: pnpm exec tsc --noEmit
     test:
-      run: pnpm test
+      # Coverage thresholds (95%) are part of the gate, not just test results.
+      run: pnpm test:coverage

@@ -21,7 +21,7 @@ pnpm dev                    # vite dev on :3000
 pnpm build                  # production build (Nitro output)
 pnpm check                  # biome lint + format check — the pre-push gate; keep it at 0 errors
 pnpm lint / pnpm format     # biome, individually
-pnpm test                   # unit tests via Node's built-in runner (no vitest/jest)
+pnpm test                   # vitest unit suite; test:coverage enforces the 95% gate
 npx tsc --noEmit            # typecheck — there is no pnpm script for it
 ```
 
@@ -49,10 +49,13 @@ overridden per run (see README → Migrations).
 
 ### Testing and quality gates
 
-Unit tests use Node's built-in runner (`pnpm test`); coverage is deliberately thin —
-the pure logic in `google-health-filter.ts` and `mcp/health.ts`. Verify behaviour
-changes with `npx tsc --noEmit`, `pnpm check`, and by exercising the app
-(`pnpm dev`, or `curl` against `/mcp` — README → MCP server has a working example).
+Vitest is configured for unit tests. `pnpm test` runs the unit suite and
+`pnpm test:coverage` enforces 95% minimum statement, branch, function and line
+coverage for the hand-written domain and transport-boundary modules listed in
+`vitest.config.ts`. Generated Google schema code and server adapters remain
+integration/build-test scope. Verify changes with `pnpm test:coverage`,
+`npx tsc --noEmit`, `pnpm check`, and by exercising the app (`pnpm dev`, or
+`curl` against `/mcp` — README → MCP server has a working example).
 
 `biome.json` enables a strict ruleset on top of `recommended`. Rules the codebase
 already satisfied are pinned at `error`; pre-existing debt (nested ternaries, long
@@ -64,8 +67,8 @@ Do not silence a rule to land a change.
 
 lefthook (`lefthook.yml`, installed by the `prepare` script) enforces the gates:
 pre-commit runs `biome check --write` on staged files; pre-push runs `pnpm check`,
-`tsc --noEmit` and `pnpm test`. All three are green at HEAD — a red gate means your
-change broke it, not baseline noise.
+`tsc --noEmit` and `pnpm test:coverage`. All three are green at HEAD — a red gate
+means your change broke it, not baseline noise.
 
 ## Architecture
 
