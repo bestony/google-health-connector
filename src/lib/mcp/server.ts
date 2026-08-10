@@ -19,7 +19,11 @@ import { buildGreeting } from "./hello";
 const log = createLogger("mcp:server");
 
 /**
- * Advertised to clients during `initialize`; keep the version in step with releases.
+ * Advertised to clients during `initialize`.
+ *
+ * `version` is written out rather than imported from `package.json`, which is
+ * not a module this bundle should pull in; it tracks the package version by
+ * hand, so bump both together.
  *
  * `name` is the programmatic identifier and `title` the display name. A client
  * older than the `title` field falls back to rendering `name`, so the two are
@@ -30,7 +34,7 @@ const log = createLogger("mcp:server");
 export const MCP_SERVER_INFO = {
 	name: "ghealth-connector",
 	title: LEGAL.appName,
-	version: "1.0.0",
+	version: "0.0.1",
 	websiteUrl: LEGAL.siteUrl,
 } as const;
 
