@@ -2,8 +2,9 @@ import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { oneTap } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
-import * as authSchema from "../db/auth-schema";
 import { getDb } from "../db/client.server";
+import type { DatabaseDialect } from "../db/dialect";
+import { getSchema } from "../db/schema";
 import {
 	getAuthBaseUrl,
 	getAuthSecret,
@@ -13,7 +14,8 @@ import {
 import { createLogger } from "./logger.server";
 
 /**
- * better-auth server instance, backed by Drizzle + libSQL (SQLite).
+ * better-auth server instance, backed by Drizzle on whichever database
+ * `DATABASE_URL` names — Turso, a local SQLite file, PostgreSQL or MySQL.
  *
  * Built lazily for the same reason as the database client: environment
  * variables must be read per request-lifetime, and importing this module should
@@ -22,6 +24,21 @@ import { createLogger } from "./logger.server";
  */
 
 const log = createLogger("auth");
+
+/**
+ * This app's dialect names → the drizzle adapter's `provider` values.
+ *
+ * They agree on two of three and disagree on the third (`postgresql` vs `pg`),
+ * which is exactly the kind of mismatch worth writing down once instead of
+ * guessing at the call site.
+ */
+const ADAPTER_PROVIDER: Readonly<
+	Record<DatabaseDialect, "sqlite" | "pg" | "mysql">
+> = {
+	sqlite: "sqlite",
+	postgresql: "pg",
+	mysql: "mysql",
+};
 
 type SocialProviders = NonNullable<BetterAuthOptions["socialProviders"]>;
 
@@ -68,8 +85,10 @@ function googleProvider(): SocialProviders["google"] {
 
 function createAuth() {
 	const baseURL = getAuthBaseUrl();
+	const { dialect, db } = getDb();
 	log.info("creating better-auth instance", {
 		baseURL,
+		dialect,
 		logLevel: getLogLevel(),
 	});
 
@@ -83,10 +102,13 @@ function createAuth() {
 		secret: getAuthSecret(),
 
 		// Drizzle owns the schema; `schema` must be passed explicitly because
-		// drizzle-orm 1.x no longer exposes `db._.fullSchema` for SQLite.
-		database: drizzleAdapter(getDb(), {
-			provider: "sqlite",
-			schema: authSchema,
+		// drizzle-orm 1.x no longer exposes `db._.fullSchema`. It has to be the
+		// one matching `dialect` — the tables carry the same names across all
+		// three, but a `pgTable` handed to a libSQL connection compiles fine and
+		// fails at the first query.
+		database: drizzleAdapter(db, {
+			provider: ADAPTER_PROVIDER[dialect],
+			schema: getSchema(dialect),
 		}),
 
 		emailAndPassword: {

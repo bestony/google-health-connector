@@ -1,4 +1,10 @@
 import "dotenv/config";
+import {
+	DATABASE_URL_EXAMPLES,
+	type DatabaseDialect,
+	detectDatabaseDialect,
+	isLocalSqliteUrl,
+} from "../db/dialect";
 
 /**
  * Server-side environment access.
@@ -32,9 +38,62 @@ function requireEnv(name: string): string {
 	return value;
 }
 
-/** libsql connection string, e.g. `file:test.db` or a Turso `libsql://...` URL. */
-export function getDatabaseUrl(): string {
-	return requireEnv("DB_FILE_NAME");
+/**
+ * The database this deployment runs on.
+ *
+ * One variable decides everything: `DATABASE_URL`'s scheme selects the dialect,
+ * and therefore the driver, the Drizzle schema, the better-auth adapter and the
+ * migration folder. There is deliberately no second `DB_DIALECT` variable to
+ * contradict it.
+ *
+ * PostgreSQL and MySQL carry their credentials in the URL itself. Only Turso
+ * splits them out, because libSQL sends the token as a bearer header rather
+ * than as part of the connection string.
+ */
+export interface DatabaseConfig {
+	dialect: DatabaseDialect;
+	url: string;
+	/** Turso's bearer token. `undefined` for every dialect but remote libSQL. */
+	authToken: string | undefined;
+}
+
+export function getDatabaseConfig(): DatabaseConfig {
+	const url = read("DATABASE_URL");
+	if (url === undefined) {
+		// Named explicitly rather than left to `requireEnv`, because this variable
+		// replaced `DB_FILE_NAME` and an already-deployed environment is exactly
+		// where this error gets hit.
+		throw new Error(
+			'[env] Missing required environment variable "DATABASE_URL" (it replaced ' +
+				`"DB_FILE_NAME"). One of: ${DATABASE_URL_EXAMPLES.join(", ")}.`,
+		);
+	}
+
+	const dialect = detectDatabaseDialect(url);
+	if (dialect === undefined) {
+		throw new Error(
+			`[env] Unsupported DATABASE_URL scheme in "${redactConnectionString(url)}". ` +
+				`Expected one of: ${DATABASE_URL_EXAMPLES.join(", ")}.`,
+		);
+	}
+
+	const authToken = read("TURSO_AUTH_TOKEN");
+	if (
+		dialect === "sqlite" &&
+		authToken === undefined &&
+		!isLocalSqliteUrl(url)
+	) {
+		// A remote libSQL URL without a token fails as an opaque 401 on the first
+		// query, long after start-up and usually inside an unrelated request.
+		// Refusing here turns it into one legible line in the deploy log.
+		throw new Error(
+			'[env] Missing required environment variable "TURSO_AUTH_TOKEN". ' +
+				`It is required for the remote database "${redactConnectionString(url)}" ` +
+				"(`turso db tokens create <name>`). Only `file:` URLs may omit it.",
+		);
+	}
+
+	return { dialect, url, authToken };
 }
 
 /** Secret used by better-auth to sign sessions and tokens. Must never reach the client. */
