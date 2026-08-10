@@ -155,3 +155,19 @@ export const GOOGLE_HEALTH_SCOPES: readonly string[] =
 export function isGoogleHealthScope(scope: string): boolean {
 	return scope.startsWith(SCOPE_PREFIX);
 }
+
+/**
+ * Whether `grantedScopes` covers the entire catalog.
+ *
+ * This is the one definition of "fully authorized", and it is deliberately set
+ * containment against `GOOGLE_HEALTH_SCOPES` rather than a count: the catalog
+ * is the moving part, so adding a data type to it flips existing users back to
+ * not-fully-authorized until they re-consent — which is exactly what should
+ * put the Google Health tab, not the API key, in front of them again.
+ */
+export function hasAllGoogleHealthScopes(
+	grantedScopes: readonly string[],
+): boolean {
+	const granted = new Set(grantedScopes);
+	return GOOGLE_HEALTH_SCOPES.every((scope) => granted.has(scope));
+}

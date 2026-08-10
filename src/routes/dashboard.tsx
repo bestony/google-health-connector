@@ -15,7 +15,7 @@ import {
 	sanitizeOAuthErrorParam,
 } from "../lib/auth-errors";
 import { googleHealthAccessQueryOptions } from "../lib/google-health-access";
-import { GOOGLE_HEALTH_SCOPES } from "../lib/google-health-scopes";
+import { hasAllGoogleHealthScopes } from "../lib/google-health-scopes";
 import { mcpEndpointQueryOptions } from "../lib/mcp/endpoint";
 import { preventSilentAccess } from "../lib/one-tap-client";
 
@@ -111,7 +111,7 @@ function DashboardPage() {
 	const justAuthorized = search.health === "granted";
 	const allGranted =
 		health.status === "linked" &&
-		GOOGLE_HEALTH_SCOPES.every((scope) => health.grantedScopes.includes(scope));
+		hasAllGoogleHealthScopes(health.grantedScopes);
 	const defaultTab =
 		oauthError === null && allGranted && !justAuthorized
 			? "api-key"
