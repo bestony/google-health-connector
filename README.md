@@ -570,6 +570,18 @@ carrying a credential that does not check out is rejected with `401` and
 an expired key, or one the user just revoked — into a client that appears to work until the
 first tool call comes back refusing to run.
 
+That `401` has a sequel. A client that gets one follows RFC 9728 and probes
+`/.well-known/oauth-protected-resource` with `Accept: application/json`, looking for OAuth
+metadata this server deliberately does not publish — it authenticates with API keys. The
+honest answer is `404`: no OAuth here, send the key. It takes `src/server.ts` to give it,
+because TanStack Start's SSR handler answers **500** to any request whose `Accept` is
+neither `text/html` nor the wildcard, for every page route and unmatched path alike. A 500
+says the server is broken and invites a retry; nothing is broken, the caller asked for a
+representation that does not exist. `src/lib/html-only-refusal.server.ts` matches that one
+response by its exact body and swaps it for a `404` — by body rather than by "a 500 that is
+JSON", because `/mcp` returns a JSON 500 of its own when a tool genuinely fails and that has
+to reach the caller untouched.
+
 The refusal a tool returns is in-band (`isError: true`) rather than a JSON-RPC error,
 because the protocol reserves those for a call that could not be *understood* and keeps
 failures of the call itself in the result, where the model can read the message and tell

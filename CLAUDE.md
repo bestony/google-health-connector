@@ -88,6 +88,12 @@ libSQL sends its token as a bearer header rather than in the URL.
 ### Server/client boundary is carried by filenames
 
 - `*.server.ts` — server-only. Never import from a component. May read `process.env`.
+- `src/server.ts` — the *server entry*, not a `.server.ts` module. It is the framework's
+  own `createStartHandler(defaultStreamHandler)` plus one correction: the SSR handler
+  answers **500** to any request whose `Accept` is neither `text/html` nor the wildcard,
+  and `html-only-refusal.server.ts` turns that into a `404` (README → MCP server). Wrap
+  here rather than in a `src/start.ts` — creating a Start instance replaces the CSRF
+  request middleware the framework otherwise installs by default.
 - `*.gen.ts` / `<dialect>-auth.ts` / `routeTree.gen.ts` — generated. Regenerate, never edit.
 - Everything else is isomorphic. Modules like `api-key.ts`, `session.ts` and
   `google-health-access.ts` export `createServerFn` handlers plus query options and
