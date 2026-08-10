@@ -76,6 +76,33 @@ export const LEGAL_RETENTION = {
 } as const;
 
 /**
+ * The billing commitments the Terms make.
+ *
+ * These are promises with deadlines attached, and a support reply is measured
+ * against them, so they are numbers rather than prose. Card networks read the
+ * refund and cancellation terms as part of underwriting, which is the other
+ * reason they are stated precisely enough to be checked.
+ *
+ * Prices are deliberately absent: they belong on the pricing page, in
+ * `plans.ts`, so a price change is one edit and the documents cannot end up
+ * quoting a figure the site stopped charging.
+ */
+export const LEGAL_BILLING = {
+	/** Full-refund window for a first-ever subscription, from the first charge. */
+	newSubscriberRefundDays: 7,
+	/** After this long, an annual term is no longer refundable on request. */
+	annualRefundCutoffDays: 30,
+	/** An outage at least this long earns a pro-rata refund or an extension. */
+	outageRefundHours: 72,
+	/** How quickly a cancellation is confirmed by email. */
+	cancellationConfirmationMinutes: 10,
+	/** How long we take to acknowledge a refund request, in business days. */
+	refundAcknowledgeBusinessDays: 2,
+	/** How long an approved refund takes to reach the payment method. */
+	refundProcessingBusinessDays: { min: 5, max: 10 },
+} as const;
+
+/**
  * External URLs both documents cite.
  *
  * Grouped here so a link that Google moves is fixed once. The Limited Use

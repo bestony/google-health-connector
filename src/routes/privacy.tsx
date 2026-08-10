@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	Bullets,
 	Callout,
@@ -126,6 +126,11 @@ const SECTIONS: readonly LegalSection[] = [
 					<li>
 						We do not use your health data to train machine learning models.
 					</li>
+					<li>
+						If you subscribe to a paid plan, our payment processor handles the
+						card details — we never see them — and your health data is no part
+						of the payment.
+					</li>
 				</Bullets>
 			</>
 		),
@@ -223,7 +228,22 @@ const SECTIONS: readonly LegalSection[] = [
 					fails.
 				</Para>
 
-				<Subheading>e. What we do not collect</Subheading>
+				<Subheading>e. Billing information</Subheading>
+				<Para>
+					If you subscribe to a paid plan, our payment processor collects your
+					payment details and takes the payment. We never receive or store your
+					full card number and have no way to see it. What we hold is your plan,
+					your billing period and its renewal date, the processor's customer and
+					transaction references, and the invoices we are required to keep. If
+					you only ever use the free plan, none of this exists.
+				</Para>
+				<Para>
+					Your health data is never part of a payment. The processor receives
+					what it needs to charge you — an account identifier, an email address
+					and an amount — and nothing about what is in your account.
+				</Para>
+
+				<Subheading>f. What we do not collect</Subheading>
 				<Para>
 					We do not use third-party analytics, advertising SDKs, tracking pixels
 					or fingerprinting. We do not buy data about you from data brokers, and
@@ -261,6 +281,12 @@ const SECTIONS: readonly LegalSection[] = [
 						<strong>Session and technical data</strong> — to operate the Service
 						securely: diagnosing faults, investigating abuse, enforcing rate
 						limits, and meeting legal obligations.
+					</li>
+					<li>
+						<strong>Billing information</strong> — to take the payment you
+						authorized, renew or end a subscription when you say so, decide
+						which plan's features you get, issue invoices and refunds, and meet
+						tax and accounting obligations.
 					</li>
 				</Bullets>
 				<Callout tone="warning">
@@ -438,6 +464,13 @@ const SECTIONS: readonly LegalSection[] = [
 						use it for their own purposes.
 					</li>
 					<li>
+						<strong>Our payment processor</strong> — only if you subscribe, and
+						only what is needed to charge you: an account identifier, an email
+						address and an amount. It never receives your health data. It is a
+						processor acting on our instructions, and it holds the card details
+						we deliberately never touch.
+					</li>
+					<li>
 						<strong>Legal compulsion</strong> — where we are required to
 						disclose by valid legal process. We will tell you before we comply
 						unless we are legally prohibited from doing so, and we will object
@@ -478,6 +511,14 @@ const SECTIONS: readonly LegalSection[] = [
 					{LEGAL_RETENTION.serverLogDays} days, then discarded.
 				</li>
 				<li>
+					<strong>Billing records</strong> — invoices and transaction records
+					are kept for as long as tax and accounting law requires us to keep
+					them, which is years rather than days. This is the one thing deleting
+					your account does not remove: we are not allowed to destroy a record
+					of a payment we took. It contains what you paid and when, not what is
+					in your health data.
+				</li>
+				<li>
 					<strong>Backups</strong> — encrypted backups roll off within{" "}
 					{LEGAL_RETENTION.backupPurgeDays} days, so data you deleted can
 					persist in a backup for up to that long before it is gone for good. We
@@ -516,9 +557,22 @@ const SECTIONS: readonly LegalSection[] = [
 						whether you want the health data deleted or the entire account
 						removed. We complete it within {LEGAL_RETENTION.deletionRequestDays}{" "}
 						days and confirm when it is done. Deletion is permanent; see the
-						backup window in <Ref id="retention" />.
+						backup window — and the billing records we are not allowed to
+						destroy — in <Ref id="retention" />.
 					</li>
 				</Steps>
+				<Para>
+					Cancelling a paid subscription is a fourth, separate thing, and it
+					deletes nothing: your account and your data carry on, on the free
+					plan. How to cancel is in the{" "}
+					<Link
+						className="text-primary underline underline-offset-2"
+						to="/terms"
+					>
+						Terms of Service
+					</Link>
+					.
+				</Para>
 				<Para>
 					Deleting your account with us does not delete anything inside Google
 					Health. Your data there stays yours, and you can export it with{" "}
