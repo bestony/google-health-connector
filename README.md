@@ -372,6 +372,43 @@ It throws `GoogleHealthAuthorizationError` when there is no linked account, when
 fails, or when a required scope was never granted — the error carries `missingScopes`, which
 is exactly what the user has to be sent back through the consent screen for.
 
+## Legal pages
+
+`/privacy` and `/terms` are the documents Google's OAuth verification review reads. They
+exist because most of the Google Health scopes are *sensitive* or *restricted*, and a
+project cannot be verified without them.
+
+| File                              | Role                                                                 |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `src/lib/legal.ts`                | App name, operator, contact address, dates, retention periods, cited URLs |
+| `src/components/legal-document.tsx` | Document shell, table of contents, typography, cross-references     |
+| `src/routes/privacy.tsx`          | Privacy Policy — the content itself                                   |
+| `src/routes/terms.tsx`            | Terms of Service — the content itself                                 |
+| `src/components/site-footer.tsx`  | Footer links, mounted on every page by `__root.tsx`                   |
+
+Changing the operator, the contact address or the effective date is one edit in
+`src/lib/legal.ts`; both documents read from it, so they cannot disagree.
+
+Five properties are requirements rather than preferences, and breaking any of them is
+enough for Google to reject the submission:
+
+- **Both routes are public.** Neither has a `beforeLoad` guard — a reviewer opens the URLs
+  without an account.
+- **They are same-origin with the app**, and linked from the home page. The site footer in
+  `src/routes/__root.tsx` is what guarantees that for every route, including new ones.
+- **The Limited Use disclosure is close to verbatim.** It is the boxed paragraph in the
+  privacy policy's `google-limited-use` section. Google matches that wording.
+- **The consent screen carries a prominent in-product disclosure.** It sits above the
+  authorize button in `src/components/google-health-authorization.tsx`, because Google
+  wants it shown *before* the consent request, not only in a linked policy.
+- **The disclosed data types match the requested scopes.** The privacy policy's table is
+  generated from `GOOGLE_HEALTH_DATA_TYPES`, so adding a scope to the catalog discloses it
+  automatically — do not hand-write that list.
+
+Cross-references inside the documents ("… see section 7") are rendered by `<Ref id="…" />`
+and numbered from the section order at render time. Never write the number by hand: an
+unknown id throws, but a stale number just points the reader at the wrong clause.
+
 ## Styling
 
 This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.

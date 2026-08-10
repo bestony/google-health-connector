@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import { useState } from "react";
 import type { GoogleHealthAccess } from "../lib/google-health-access";
 import { requestGoogleHealthAccess } from "../lib/google-health-client";
@@ -8,6 +9,7 @@ import {
 	type GoogleHealthDataType,
 	googleHealthScope,
 } from "../lib/google-health-scopes";
+import { LEGAL_LINKS } from "../lib/legal";
 
 /**
  * The Google Health authorization card on the dashboard.
@@ -20,6 +22,12 @@ import {
  * The button stays available once everything is granted: re-running it is how a
  * user restores an access that was revoked from their Google account settings,
  * and how a new scope added to the catalog gets picked up.
+ *
+ * The disclosure above the button is not filler. Google's OAuth verification
+ * requires a prominent, in-product explanation of what health data is accessed
+ * and what happens to it, shown *before* the consent screen is requested rather
+ * than only in a linked policy — so it has to sit here, next to the action that
+ * triggers the request.
  */
 
 interface GoogleHealthAuthorizationProps {
@@ -90,6 +98,34 @@ export function GoogleHealthAuthorization({
 				for every permission below in one consent screen, and you can untick any
 				of them there.
 			</p>
+
+			<div className="mt-3 max-w-prose rounded-md border border-border bg-muted px-4 py-3 text-sm text-muted-foreground">
+				<p>
+					<strong className="text-foreground">
+						Before you grant this, here is what happens to the data.
+					</strong>{" "}
+					We read the categories you leave ticked and store a copy on our
+					servers so your history stays available to you. We never sell it, use
+					it for advertising, or hand it to anyone else for their own purposes.
+					It leaves our servers only when you connect an MCP client yourself.
+				</p>
+				<p className="mt-2">
+					You can withdraw this at any time — from{" "}
+					<a
+						className="underline underline-offset-2"
+						href={LEGAL_LINKS.googlePermissions}
+						rel="noopener noreferrer"
+						target="_blank"
+					>
+						your Google account permissions
+					</a>{" "}
+					— and ask us to delete the stored copy. Full detail in the{" "}
+					<Link className="underline underline-offset-2" to="/privacy">
+						Privacy Policy
+					</Link>
+					.
+				</p>
+			</div>
 
 			{access.status === "disabled" ? (
 				<p className="mt-4 text-sm text-muted-foreground">
