@@ -12,8 +12,7 @@ copy is stored server-side.
 `README.md` is unusually detailed and is the source of truth for behaviour and
 rationale; the sections on Database, Authentication, Google Health authorization,
 The API client, Legal pages, API keys and MCP server are worth reading before
-changing those areas. `docs/product-description.md` describes the product and
-pricing (Chinese).
+changing those areas.
 
 ## Commands
 
