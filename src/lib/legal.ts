@@ -19,7 +19,7 @@
 
 export const LEGAL = {
 	/** Product name, as it appears on the Google OAuth consent screen. */
-	appName: "Still Warm",
+	appName: "GHealth Connector",
 	/** Canonical origin. The policy URLs Google is given must live under it. */
 	siteUrl: "https://www.stillwarm.app",
 	/** Who operates the service, as it should read inside a sentence. */

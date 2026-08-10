@@ -4,9 +4,11 @@ import {
 	createRootRouteWithContext,
 	HeadContent,
 	Scripts,
+	useRouterState,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 import { SiteFooter } from "../components/site-footer";
+import { SiteHeader } from "../components/site-header";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
 import { LEGAL } from "../lib/legal";
 import { sessionQueryOptions } from "../lib/session";
@@ -51,6 +53,16 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 });
 
 function RootDocument({ children }: { children: React.ReactNode }) {
+	// Only the booleans are selected, not the session or the whole location: the
+	// header re-renders when the visitor signs in or out, or when they arrive at
+	// or leave `/login`, and not on every other state change.
+	const signedIn = Route.useRouteContext({
+		select: (context) => context.session !== null,
+	});
+	const onLoginPage = useRouterState({
+		select: (state) => state.location.pathname === "/login",
+	});
+
 	return (
 		<html lang="en">
 			<head>
@@ -60,6 +72,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           policy link Google's review requires on the home page — pinned to the
           bottom on short pages instead of floating mid-screen. */}
 			<body className="flex min-h-svh flex-col">
+				<SiteHeader signedIn={signedIn} showAction={!onLoginPage} />
 				<div className="flex-1">{children}</div>
 				<SiteFooter />
 				<TanStackDevtools

@@ -16,7 +16,9 @@ import { LEGAL, LEGAL_CONTACT_MAILTO } from "../lib/legal";
 export function SiteFooter() {
 	return (
 		<footer className="border-t border-border">
-			<div className="flex flex-wrap items-center justify-between gap-x-6 gap-y-2 px-8 py-6 text-sm text-muted-foreground">
+			{/* Same container as `SiteHeader`, so the copyright line starts under the
+			    wordmark instead of hanging off the edge of the page. */}
+			<div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-x-6 gap-y-2 px-6 py-6 text-sm text-muted-foreground sm:px-8">
 				<p>
 					© {LEGAL.copyrightYear} {LEGAL.appName}
 				</p>
