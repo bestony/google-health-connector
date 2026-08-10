@@ -8,7 +8,7 @@ import { createLogger } from "./logger.server";
  *
  * The browser cannot read `process.env`, and a "Continue with Google" button
  * that only fails once the user clicks it is worse than no button at all. This
- * exposes the single boolean the UI needs — never the credentials themselves.
+ * exposes what the UI needs and nothing more — never the client secret.
  *
  * Same isomorphic shape as `session.ts`: TanStack Start strips the `.handler()`
  * body (and the `env.server` import with it) from the client bundle, so route
@@ -18,17 +18,31 @@ import { createLogger } from "./logger.server";
 const log = createLogger("auth:providers");
 
 export interface EnabledSocialProviders {
+	/** Whether Google sign-in can be offered at all. */
 	google: boolean;
+
+	/**
+	 * Google's OAuth **client ID**, or `null` when Google sign-in is off.
+	 *
+	 * Unlike the client secret this value is public by design — it travels in
+	 * every authorization URL Google receives — and Google One Tap cannot
+	 * initialize without it in the browser. Serving it from here instead of a
+	 * `VITE_`-prefixed build constant keeps `.env` the single source of truth
+	 * and lets one build run against several environments.
+	 */
+	googleClientId: string | null;
 }
 
 export const SOCIAL_PROVIDERS_QUERY_KEY = ["auth", "social-providers"] as const;
 
 export const fetchSocialProviders = createServerFn({ method: "GET" }).handler(
 	async (): Promise<EnabledSocialProviders> => {
-		const providers = {
-			google: getGoogleOAuthConfig().status === "configured",
+		const google = getGoogleOAuthConfig();
+		const providers: EnabledSocialProviders = {
+			google: google.status === "configured",
+			googleClientId: google.status === "configured" ? google.clientId : null,
 		};
-		log.debug("resolved enabled social providers", providers);
+		log.debug("resolved enabled social providers", { ...providers });
 		return providers;
 	},
 );

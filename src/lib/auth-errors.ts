@@ -14,6 +14,7 @@
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
 	access_denied: "Google sign-in was cancelled.",
+	invalid_id_token: "Google sign-in could not be verified. Try again.",
 	account_not_linked:
 		"An account with this email address already exists. Sign in with your password first, then connect Google from your account.",
 	email_not_found: "Google did not return an email address for this account.",
@@ -57,4 +58,26 @@ export function describeOAuthError(code: string, description?: string): string {
 	return description !== undefined
 		? `Google sign-in failed: ${description} (${code})`
 		: `Google sign-in failed (${code}).`;
+}
+
+/**
+ * Copy for a sign-in that failed *in a response body* rather than in the URL.
+ *
+ * Google One Tap posts an ID token to `/api/auth/one-tap/callback` and gets
+ * JSON back, so its failures never reach `describeOAuthError`. better-auth
+ * words them as prose (`"account not linked"`) where the redirect flow uses a
+ * code (`account_not_linked`); the two describe the same conditions, so the
+ * message is normalised back into a code and looked up in the same table.
+ *
+ * Anything unmapped is passed through verbatim: better-auth's own wording is
+ * already user-readable, and hiding it would make a novel failure unreportable.
+ */
+export function describeSignInError(message?: string): string {
+	const trimmed = message?.trim();
+	if (trimmed === undefined || trimmed === "") {
+		return "Google sign-in failed. Try again.";
+	}
+
+	const code = trimmed.toLowerCase().replace(/[\s-]+/g, "_");
+	return OAUTH_ERROR_MESSAGES[code] ?? `Google sign-in failed: ${trimmed}`;
 }

@@ -26,9 +26,11 @@ Authentication is handled by [better-auth](https://better-auth.com), persisted t
 | ----------------------------- | ------------------------------------------------------------------------- |
 | `src/lib/auth.server.ts`      | better-auth instance (`getAuth()`), Drizzle adapter, providers — server only |
 | `src/lib/auth-client.ts`      | Browser client (`signIn`, `signUp`, `signOut`, `useSession`)               |
+| `src/lib/one-tap-client.ts`   | Google One Tap client, built once the client ID is known + FedCM sign-out  |
 | `src/lib/session.ts`          | `fetchSession` server function + `sessionQueryOptions()` cache entry       |
-| `src/lib/auth-providers.ts`   | Tells the browser which social providers have credentials configured       |
-| `src/lib/auth-errors.ts`      | Maps better-auth's `?error=` OAuth codes to user-facing copy               |
+| `src/lib/auth-providers.ts`   | Tells the browser which social providers are configured, and their client ID |
+| `src/lib/auth-errors.ts`      | Maps better-auth's OAuth error codes and messages to user-facing copy      |
+| `src/components/google-one-tap.tsx` | Mounts the One Tap prompt and turns its result into a soft navigation |
 | `src/routes/api/auth/$.ts`    | Mounts every better-auth endpoint under `/api/auth/*`                      |
 | `src/db/auth-schema.ts`       | Generated Drizzle tables: `user`, `session`, `account`, `verification`     |
 | `src/db/client.server.ts`     | Lazy Drizzle/libSQL client (`getDb()`)                                     |
@@ -71,7 +73,10 @@ that drizzle-orm 1.x removed; delete those blocks from `src/db/auth-schema.ts` a
    `<BETTER_AUTH_URL>/api/auth/callback/google`, so it must match the origin the app is
    served from — `http://localhost:3000/api/auth/callback/google` locally. A mismatch here
    is what produces Google's `redirect_uri_mismatch` error.
-3. Put the credentials in `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+3. Add `<BETTER_AUTH_URL>` itself — no path — as an *Authorized JavaScript origin*
+   (`http://localhost:3000` locally). Only One Tap needs this, and it fails *silently*
+   without it.
+4. Put the credentials in `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
 No migration is needed: OAuth identities live in the existing `account` table. Leaving both
 variables empty is supported — the provider is simply not registered and `/login` hides the
@@ -90,6 +95,42 @@ Two choices worth knowing about, both in `src/lib/auth.server.ts`:
   verification flow, so signing in with Google using an address that already has a password
   account fails with `account_not_linked` — the login page explains that. Request extra Google
   scopes later with `authClient.linkSocial({ provider: "google", scopes: [...] })`.
+
+### Google One Tap
+
+`/login` also shows Google's One Tap prompt, which signs a returning user in from the
+overlay without ever leaving the page. It needs no extra credentials — the same
+`GOOGLE_CLIENT_ID`, plus the *Authorized JavaScript origin* from step 3 above — and no
+migration, because it writes the same `account` row the redirect flow does.
+
+```
+oneTap()                          server plugin  → POST /api/auth/one-tap/callback
+oneTapClient({ clientId })        browser plugin → Google Identity Services
+<GoogleOneTap clientId=… />       mounts the prompt on /login
+```
+
+Three things about the wiring are worth knowing:
+
+- **The client ID is fetched, not bundled.** `oneTapClient()` wants it at construction time,
+  so `src/lib/one-tap-client.ts` builds a *second* better-auth client on demand, once
+  `fetchSocialProviders()` has returned the ID. The alternative — a `VITE_GOOGLE_CLIENT_ID`
+  build constant — would freeze one environment's ID into the build and duplicate what is
+  already in `.env`. Both clients share the session cookie, so nothing else changes.
+- **Success is a soft navigation.** Passing `fetchOptions` suppresses better-auth's built-in
+  `window.location` redirect, so the page invalidates the cached session and routes
+  client-side, exactly like the email form.
+- **Sign-out calls `preventSilentAccess()`.** The FedCM hook that normally does this lives on
+  the One Tap client, not on the shared `authClient`, so `/dashboard` calls it explicitly.
+  Skip it and the prompt on `/login` can hand the session straight back.
+
+A prompt that never appears is the normal failure mode: Google suppresses it when the
+visitor has no Google session, has dismissed it repeatedly, or when the browser blocks
+federated sign-in — and the "Continue with Google" button below it is the fallback. The
+reason is only ever visible in the browser console, at `debug` level:
+
+```js
+localStorage.setItem('app:logLevel', 'debug')   // then reload; see src/lib/logger-client.ts
+```
 
 ## Styling
 

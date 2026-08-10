@@ -1,5 +1,6 @@
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { oneTap } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import * as authSchema from "../db/auth-schema";
 import { getDb } from "../db/client.server";
@@ -72,6 +73,10 @@ function createAuth() {
 		logLevel: getLogLevel(),
 	});
 
+	// Resolved once: `googleProvider()` logs, and it decides below whether the
+	// One Tap endpoint is worth mounting at all.
+	const google = googleProvider();
+
 	return betterAuth({
 		appName: "google-health-connector",
 		baseURL,
@@ -90,7 +95,7 @@ function createAuth() {
 		},
 
 		socialProviders: {
-			google: googleProvider(),
+			google,
 		},
 
 		account: {
@@ -126,9 +131,23 @@ function createAuth() {
 			level: getLogLevel(),
 		},
 
-		// `tanstackStartCookies` writes Set-Cookie through TanStack Start's server
-		// context. It hooks every response, so it MUST remain the last plugin.
-		plugins: [tanstackStartCookies()],
+		plugins: [
+			// Google One Tap: `POST /api/auth/one-tap/callback` trades the ID token
+			// the browser gets from Google Identity Services for a session, with no
+			// redirect round trip. It reuses `socialProviders.google.clientId` as
+			// the token audience, which is why it is only mounted when Google is
+			// configured — registering it unconfigured would answer every call with
+			// a confusing "Google client ID is required" 400 instead of a 404.
+			//
+			// Sign-ups are allowed here, exactly as they are for the redirect flow,
+			// and land in the same `account` table. Pass `disableSignup: true` to
+			// restrict One Tap to users who already exist.
+			...(google ? [oneTap()] : []),
+
+			// `tanstackStartCookies` writes Set-Cookie through TanStack Start's
+			// server context. It hooks every response, so it MUST remain last.
+			tanstackStartCookies(),
+		],
 	});
 }
 

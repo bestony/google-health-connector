@@ -1,6 +1,7 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { authClient } from "../lib/auth-client";
+import { preventSilentAccess } from "../lib/one-tap-client";
 import { SESSION_QUERY_KEY } from "../lib/session";
 
 /**
@@ -29,6 +30,12 @@ function DashboardPage() {
 	async function onSignOut() {
 		setPending(true);
 		await authClient.signOut();
+
+		// Signing out has to reach the identity provider too: without this, FedCM
+		// keeps the account it auto-selected and the One Tap prompt waiting on
+		// `/login` can hand the session straight back.
+		await preventSilentAccess();
+
 		await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY });
 		await router.invalidate();
 		await router.navigate({ to: "/login", search: { redirect: undefined } });

@@ -1,5 +1,6 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
+import { GoogleOneTap } from "../components/google-one-tap";
 import { GoogleSignInButton } from "../components/google-sign-in-button";
 import { authClient } from "../lib/auth-client";
 import {
@@ -86,6 +87,11 @@ function LoginPage() {
 	const [error, setError] = useState<string | null>(null);
 	const [pending, setPending] = useState(false);
 	const [googlePending, setGooglePending] = useState(false);
+	// One Tap runs on its own, without anything on this page being clicked, so
+	// it needs its own flag: the form has to lock while the ID token is being
+	// redeemed, but the "Continue with Google" button must not claim it is
+	// redirecting when it is not.
+	const [oneTapPending, setOneTapPending] = useState(false);
 
 	// A failed OAuth round trip lands here as a query param, so it has to be read
 	// from the URL rather than from the form's own error state.
@@ -94,6 +100,19 @@ function LoginPage() {
 			? describeOAuthError(search.error, search.error_description)
 			: null;
 	const message = error ?? oauthError;
+
+	/**
+	 * Leave the login page once a session cookie exists.
+	 *
+	 * Shared by every flow that signs in without a full page load — the email
+	 * form and Google One Tap. The cookie changed underneath the cached session,
+	 * so it is dropped before the router re-runs `beforeLoad` with the new one.
+	 */
+	async function completeSignIn() {
+		await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY });
+		await router.invalidate();
+		await router.navigate({ to: search.redirect ?? "/dashboard" });
+	}
 
 	async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -112,11 +131,7 @@ function LoginPage() {
 			return;
 		}
 
-		// The session cookie changed, so drop the cached session and let the
-		// router re-run `beforeLoad` with the new one.
-		await queryClient.invalidateQueries({ queryKey: SESSION_QUERY_KEY });
-		await router.invalidate();
-		await router.navigate({ to: search.redirect ?? "/dashboard" });
+		await completeSignIn();
 	}
 
 	async function onGoogleSignIn() {
@@ -150,7 +165,7 @@ function LoginPage() {
 		}
 	}
 
-	const busy = pending || googlePending;
+	const busy = pending || googlePending || oneTapPending;
 
 	return (
 		<div className="mx-auto max-w-sm p-8">
@@ -158,13 +173,31 @@ function LoginPage() {
 				{mode === "signin" ? "Sign in" : "Create an account"}
 			</h1>
 
+			{providers.googleClientId !== null && (
+				// One Tap asks Google directly, in an overlay this page does not
+				// own, and stays silent when Google declines to show it. The button
+				// below is the fallback and is always rendered.
+				<GoogleOneTap
+					clientId={providers.googleClientId}
+					onStart={() => {
+						setError(null);
+						setOneTapPending(true);
+					}}
+					onSuccess={completeSignIn}
+					onError={(message) => {
+						setError(message);
+						setOneTapPending(false);
+					}}
+				/>
+			)}
+
 			{providers.google && (
 				<>
 					<div className="mt-6">
 						<GoogleSignInButton
 							onClick={onGoogleSignIn}
 							pending={googlePending}
-							disabled={pending}
+							disabled={pending || oneTapPending}
 						/>
 					</div>
 
@@ -218,6 +251,12 @@ function LoginPage() {
 						required
 					/>
 				</label>
+
+				{oneTapPending && (
+					<p className="text-sm text-muted-foreground">
+						Signing you in with Google…
+					</p>
+				)}
 
 				{message && <p className="text-sm text-red-600">{message}</p>}
 
