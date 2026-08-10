@@ -8,6 +8,15 @@ importers:
 
   .:
     dependencies:
+      '@fontsource-variable/google-sans':
+        specifier: ^5.3.1
+        version: 5.3.1
+      '@fontsource-variable/roboto-mono':
+        specifier: ^5.3.0
+        version: 5.3.0
+      '@fontsource-variable/roboto-serif':
+        specifier: ^5.3.0
+        version: 5.3.0
       '@libsql/client':
         specifier: ^0.17.4
         version: 0.17.4
@@ -738,6 +747,15 @@ packages:
     engines: {node: '>=18'}
     cpu: [x64]
     os: [win32]
+
+  '@fontsource-variable/google-sans@5.3.1':
+    resolution: {integrity: sha512-FLB6ZktdAtYWj49W6TtmqThHb33XL5g8l6T+oKNcvmNUXou4PPdIkstt1Z/UyD6K+g/CYjiHF+j+eRMNZxYKZg==}
+
+  '@fontsource-variable/roboto-mono@5.3.0':
+    resolution: {integrity: sha512-h5r+KY/6qy8JEOj33JgcrFO81YAnvrc1EAwMpl/EPJLb2OIvOy0/jmB5M7qs7x/uXk5JUP5Ux4LrkeOK7faHkQ==}
+
+  '@fontsource-variable/roboto-serif@5.3.0':
+    resolution: {integrity: sha512-MOZEZkrYvhCPuUPsZeWzOeXPlEbfhHUgg7nPIiUWVZnJt3TF2CU1Gpavlf1YIjl0SejsD0OJOExAYXg48D47bw==}
 
   '@jridgewell/gen-mapping@0.3.13':
     resolution: {integrity: sha512-2kkt/7niJ6MgEPxF0bYdQ6etZaA+fQvDcLKckhy1yIQOzaoKjBBjSj63/aLVjYE3qhRt5dvM+uUyfCg6UKCBbA==}
@@ -3204,6 +3222,12 @@ snapshots:
 
   '@esbuild/win32-x64@0.28.2':
     optional: true
+
+  '@fontsource-variable/google-sans@5.3.1': {}
+
+  '@fontsource-variable/roboto-mono@5.3.0': {}
+
+  '@fontsource-variable/roboto-serif@5.3.0': {}
 
   '@jridgewell/gen-mapping@0.3.13':
     dependencies:
