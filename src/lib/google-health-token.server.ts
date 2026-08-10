@@ -15,12 +15,17 @@ import { createLogger } from "./logger.server";
  * Server-only: it reads the request's session cookie and decrypts tokens with
  * `BETTER_AUTH_SECRET`. Never import it from a component.
  *
+ * Most callers want `createGoogleHealthClient()` from
+ * `google-health-api.server.ts`, which goes through this and then knows the
+ * paths, filters and pagination. Reach for the token itself only for something
+ * the client does not wrap:
+ *
  * ```ts
  * const { accessToken } = await getGoogleHealthAccessToken({
  *   requiredScopes: [googleHealthScope("sleep", "read")],
  * });
  *
- * const response = await fetch("https://healthdata.googleapis.com/…", {
+ * const response = await fetch("https://health.googleapis.com/v4/…", {
  *   headers: { Authorization: `Bearer ${accessToken}` },
  * });
  * ```

@@ -20,6 +20,7 @@
     "db:migrate": "tsx scripts/migrate.ts",
     "db:baseline": "tsx scripts/migrate.ts --baseline",
     "db:studio": "npx drizzle-kit studio",
+    "google-health:generate": "tsx scripts/generate-google-health-api.ts && biome check --write src/lib/google-health-api.gen.ts",
     "auth:generate": "pnpm auth:generate:sqlite && pnpm auth:generate:postgresql && pnpm auth:generate:mysql",
     "auth:generate:sqlite": "DATABASE_URL=:memory: auth generate --config auth.config.ts --output src/db/schema/sqlite-auth.ts -y",
     "auth:generate:postgresql": "DATABASE_URL=postgres://generate@localhost/generate auth generate --config auth.config.ts --output src/db/schema/postgresql-auth.ts -y",

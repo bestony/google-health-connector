@@ -194,6 +194,9 @@ Authentication is handled by [better-auth](https://better-auth.com), persisted t
 | `src/lib/google-health-access.ts` | `fetchGoogleHealthAccess` server function: which scopes were granted   |
 | `src/lib/google-health-client.ts` | Browser entry point that starts the authorization round trip           |
 | `src/lib/google-health-token.server.ts` | Access tokens for calling Google, refreshed by better-auth       |
+| `src/lib/google-health-api.gen.ts` | Generated from Google's discovery document: schema types + data type catalog |
+| `src/lib/google-health-filter.ts` | Builds a data type's time filter — the part that is easy to get silently wrong |
+| `src/lib/google-health-api.server.ts` | `createGoogleHealthClient()`: paths, pagination and typed errors |
 | `src/components/google-health-authorization.tsx` | The authorize button and permission list on `/dashboard` |
 | `src/lib/api-key-config.ts`   | Key prefix, rate limit and header name — pure data, shared by both sides    |
 | `src/lib/api-key.ts`          | Issue, read and revoke the signed-in user's one API key                    |
@@ -374,6 +377,70 @@ const { accessToken } = await getGoogleHealthAccessToken({
 It throws `GoogleHealthAuthorizationError` when there is no linked account, when the refresh
 fails, or when a required scope was never granted — the error carries `missingScopes`, which
 is exactly what the user has to be sent back through the consent screen for.
+
+### The API client
+
+`createGoogleHealthClient()` wraps the v4 API so that reading data is one call rather than a
+URL, a filter grammar and a pagination loop.
+
+```ts
+import { createGoogleHealthClient } from '#/lib/google-health-api.server'
+import { googleHealthScope } from '#/lib/google-health-scopes'
+
+const health = createGoogleHealthClient({
+  requiredScopes: [googleHealthScope('sleep', 'read')],
+})
+
+// One page.
+const { dataPoints } = await health.listDataPoints('steps', { from, to })
+
+// Every page, followed for you.
+for await (const point of health.iterateDataPoints('sleep', { from, to })) {
+  console.log(point.sleep?.summary)
+}
+
+// Writing back.
+await health.createDataPoint('weight', { weight: { weightGrams: 70000 } })
+```
+
+| File                                | Role                                                            |
+| ----------------------------------- | --------------------------------------------------------------- |
+| `scripts/generate-google-health-api.ts` | Reads the discovery document, writes the generated module     |
+| `src/lib/google-health-api.gen.ts`  | GENERATED: 147 schema types and the data type catalog             |
+| `src/lib/google-health-filter.ts`   | Builds the time filter for a data type. Isomorphic, pure          |
+| `src/lib/google-health-api.server.ts` | The client: auth, paths, pagination, typed errors               |
+
+Regenerate after Google ships a change — the revision is stamped at the top of the file:
+
+```bash
+pnpm google-health:generate
+```
+
+Three things are worth knowing before you use it.
+
+**A data type has three spellings.** `daily-resting-heart-rate` in a resource path,
+`dailyRestingHeartRate` on a `DataPoint`, `daily_resting_heart_rate` inside a filter. The
+generated catalog carries all three, and the client takes the path form — so
+`listDataPoints('daily-resting-heart-rate', …)` is the only one you type.
+
+**The time filter is not uniform, and getting it wrong returns an empty page rather than an
+error.** Which field a filter may name depends on the type: `interval.start_time` for
+interval types, `sample_time.physical_time` for samples, `date` for daily summaries. Two
+types then break even that rule, and `google-health-filter.ts` encodes both:
+
+- **Sleep** filters on its *end* time. A night that began before the window and ended inside
+  it is the normal case, and filtering on the start would drop exactly the night you asked
+  for.
+- **Electrocardiogram** accepts `>=` on the start time and nothing else. Passing `to` for it
+  throws rather than silently widening your window to "everything since".
+
+**Every field on every generated type is optional.** proto3 JSON omits defaults, so a field
+the user never recorded is absent rather than null. The types say so instead of pretending
+otherwise, which means you narrow at the point of use.
+
+Failures arrive as `GoogleHealthApiError` with the HTTP status, Google's canonical status
+(`PERMISSION_DENIED`, `NOT_FOUND`) and a `retryable` flag. Set `LOG_LEVEL=debug` to log every
+request's path, status and duration under the `google-health:api` scope.
 
 ## Legal pages
 
