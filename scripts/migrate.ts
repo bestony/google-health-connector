@@ -48,6 +48,7 @@ interface MigrateConfig extends MigrationConfig {
 function runMigrator(
 	handle: DatabaseHandle,
 	config: MigrateConfig,
+	// biome-ignore lint/suspicious/noConfusingVoidType: the drizzle migrators return Promise<void> for sqlite/postgres and a response for mysql
 ): Promise<MigratorInitFailResponse | void> {
 	switch (handle.dialect) {
 		case "sqlite":
@@ -111,7 +112,8 @@ async function main(): Promise<void> {
 
 main().catch((error: unknown) => {
 	log.error("migration failed", {
-		error: error instanceof Error ? (error.stack ?? error.message) : String(error),
+		error:
+			error instanceof Error ? (error.stack ?? error.message) : String(error),
 	});
 	process.exitCode = 1;
 });

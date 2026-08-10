@@ -9,9 +9,12 @@
 		"ignoreUnknown": false,
 		"includes": [
 			"**/src/**/*",
+			"**/scripts/**/*",
 			"**/.vscode/**/*",
 			"**/index.html",
 			"**/vite.config.ts",
+			"**/drizzle.config.ts",
+			"**/auth.config.ts",
 			"!**/src/routeTree.gen.ts",
 			"!**/src/styles.css"
 		]
@@ -174,6 +177,10 @@
 			"linter": {
 				"rules": { "suspicious": { "noEmptyBlockStatements": "off" } }
 			}
+		},
+		{
+			"includes": ["**/scripts/**"],
+			"linter": { "rules": { "suspicious": { "noConsole": "off" } } }
 		}
 	]
 }

@@ -18,7 +18,8 @@ import { writeFileSync } from "node:fs";
  * are exactly the parts the discovery document does not describe.
  */
 
-const DISCOVERY_URL = "https://health.googleapis.com/$discovery/rest?version=v4";
+const DISCOVERY_URL =
+	"https://health.googleapis.com/$discovery/rest?version=v4";
 const OUTPUT = "src/lib/google-health-api.gen.ts";
 
 /** Subset of the discovery document this script reads. */
