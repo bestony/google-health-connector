@@ -1,10 +1,16 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
+import { GoogleSignInButton } from "../components/google-sign-in-button";
 import { authClient } from "../lib/auth-client";
+import {
+	describeOAuthError,
+	sanitizeOAuthErrorParam,
+} from "../lib/auth-errors";
+import { socialProvidersQueryOptions } from "../lib/auth-providers";
 import { SESSION_QUERY_KEY } from "../lib/session";
 
 /**
- * Demo sign-in / sign-up screen for the email + password provider.
+ * Demo sign-in / sign-up screen for the email + password and Google providers.
  *
  * It is intentionally plain: it exists to exercise the better-auth wiring end
  * to end. Replace or restyle it freely — nothing else depends on this file.
@@ -23,15 +29,47 @@ function sanitizeRedirect(value: unknown): string | undefined {
 	return value;
 }
 
+/**
+ * `error` / `error_description` are set by better-auth when it bounces a failed
+ * OAuth flow back here (see `errorCallbackURL` below).
+ *
+ * Every key is optional and omitted when absent, rather than emitted as
+ * `undefined`: TanStack derives the type callers must pass to `<Link search>`
+ * from this shape, and nothing linking to `/login` should have to name the
+ * OAuth params just to satisfy it.
+ */
+interface LoginSearch {
+	redirect?: string;
+	error?: string;
+	error_description?: string;
+}
+
+function validateLoginSearch(search: Record<string, unknown>): LoginSearch {
+	const result: LoginSearch = {};
+
+	const to = sanitizeRedirect(search.redirect);
+	if (to !== undefined) result.redirect = to;
+
+	const error = sanitizeOAuthErrorParam(search.error);
+	if (error !== undefined) result.error = error;
+
+	const description = sanitizeOAuthErrorParam(search.error_description);
+	if (description !== undefined) result.error_description = description;
+
+	return result;
+}
+
 export const Route = createFileRoute("/login")({
-	validateSearch: (search: Record<string, unknown>) => ({
-		redirect: sanitizeRedirect(search.redirect),
-	}),
+	validateSearch: validateLoginSearch,
 	beforeLoad: ({ context, search }) => {
 		if (context.session) {
 			throw redirect({ to: search.redirect ?? "/dashboard" });
 		}
 	},
+	// Which social buttons to render depends on the server's credentials, so it
+	// has to be resolved before paint rather than guessed in the browser.
+	loader: ({ context }) =>
+		context.queryClient.ensureQueryData(socialProvidersQueryOptions()),
 	component: LoginPage,
 });
 
@@ -39,6 +77,7 @@ function LoginPage() {
 	const router = useRouter();
 	const { queryClient } = Route.useRouteContext();
 	const search = Route.useSearch();
+	const providers = Route.useLoaderData();
 
 	const [mode, setMode] = useState<Mode>("signin");
 	const [name, setName] = useState("");
@@ -46,6 +85,15 @@ function LoginPage() {
 	const [password, setPassword] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [pending, setPending] = useState(false);
+	const [googlePending, setGooglePending] = useState(false);
+
+	// A failed OAuth round trip lands here as a query param, so it has to be read
+	// from the URL rather than from the form's own error state.
+	const oauthError =
+		search.error !== undefined
+			? describeOAuthError(search.error, search.error_description)
+			: null;
+	const message = error ?? oauthError;
 
 	async function onSubmit(event: React.FormEvent<HTMLFormElement>) {
 		event.preventDefault();
@@ -71,13 +119,67 @@ function LoginPage() {
 		await router.navigate({ to: search.redirect ?? "/dashboard" });
 	}
 
+	async function onGoogleSignIn() {
+		setError(null);
+		setGooglePending(true);
+
+		// Both callbacks are same-origin paths handled by this app: on success
+		// Google's callback endpoint issues the session cookie and redirects
+		// straight to `callbackURL`, so there is no cache to invalidate here — the
+		// browser does a full navigation and the router re-reads the session on
+		// the server. On failure better-auth appends `?error=` to
+		// `errorCallbackURL`; keep `redirect` on it so a retry still honours it.
+		const target = search.redirect ?? "/dashboard";
+		const errorCallbackURL =
+			search.redirect !== undefined
+				? `/login?redirect=${encodeURIComponent(search.redirect)}`
+				: "/login";
+
+		const { error: signInError } = await authClient.signIn.social({
+			provider: "google",
+			callbackURL: target,
+			newUserCallbackURL: target,
+			errorCallbackURL,
+		});
+
+		// On success the browser is already navigating to Google, so the button is
+		// left pending on purpose instead of flashing back to idle.
+		if (signInError) {
+			setError(signInError.message ?? "Could not start Google sign-in.");
+			setGooglePending(false);
+		}
+	}
+
+	const busy = pending || googlePending;
+
 	return (
 		<div className="mx-auto max-w-sm p-8">
 			<h1 className="text-2xl font-bold">
 				{mode === "signin" ? "Sign in" : "Create an account"}
 			</h1>
 
-			<form className="mt-6 flex flex-col gap-3" onSubmit={onSubmit}>
+			{providers.google && (
+				<>
+					<div className="mt-6">
+						<GoogleSignInButton
+							onClick={onGoogleSignIn}
+							pending={googlePending}
+							disabled={pending}
+						/>
+					</div>
+
+					<div className="my-6 flex items-center gap-3 text-xs text-muted-foreground">
+						<span className="h-px flex-1 bg-border" />
+						or
+						<span className="h-px flex-1 bg-border" />
+					</div>
+				</>
+			)}
+
+			<form
+				className={`flex flex-col gap-3 ${providers.google ? "" : "mt-6"}`}
+				onSubmit={onSubmit}
+			>
 				{mode === "signup" && (
 					<label className="flex flex-col gap-1 text-sm">
 						Name
@@ -117,12 +219,12 @@ function LoginPage() {
 					/>
 				</label>
 
-				{error && <p className="text-sm text-red-600">{error}</p>}
+				{message && <p className="text-sm text-red-600">{message}</p>}
 
 				<button
 					className="rounded bg-black px-3 py-2 text-white disabled:opacity-50"
 					type="submit"
-					disabled={pending}
+					disabled={busy}
 				>
 					{pending ? "Working…" : mode === "signin" ? "Sign in" : "Sign up"}
 				</button>

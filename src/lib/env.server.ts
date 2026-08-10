@@ -47,6 +47,35 @@ export function getAuthBaseUrl(): string {
 	return read("BETTER_AUTH_URL") ?? DEFAULT_AUTH_BASE_URL;
 }
 
+/**
+ * Google OAuth client credentials, or the list of variables that are missing.
+ *
+ * Google sign-in is deliberately optional: a checkout without credentials must
+ * still boot and serve email + password sign-in. The `unconfigured` variant
+ * carries the missing names so callers can tell the two failure modes apart —
+ * both absent is a valid setup, exactly one absent is always a typo.
+ *
+ * A half-filled pair never yields credentials, so a misconfiguration surfaces
+ * at start-up instead of as a `redirect_uri_mismatch` halfway through a login.
+ */
+export type GoogleOAuthConfig =
+	| { status: "configured"; clientId: string; clientSecret: string }
+	| { status: "unconfigured"; missing: string[] };
+
+export function getGoogleOAuthConfig(): GoogleOAuthConfig {
+	const clientId = read("GOOGLE_CLIENT_ID");
+	const clientSecret = read("GOOGLE_CLIENT_SECRET");
+
+	if (clientId !== undefined && clientSecret !== undefined) {
+		return { status: "configured", clientId, clientSecret };
+	}
+
+	const missing: string[] = [];
+	if (clientId === undefined) missing.push("GOOGLE_CLIENT_ID");
+	if (clientSecret === undefined) missing.push("GOOGLE_CLIENT_SECRET");
+	return { status: "unconfigured", missing };
+}
+
 export function isProduction(): boolean {
 	return read("NODE_ENV") === "production";
 }

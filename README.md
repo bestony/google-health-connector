@@ -22,14 +22,16 @@ pnpm build
 Authentication is handled by [better-auth](https://better-auth.com), persisted through
 [Drizzle ORM](https://orm.drizzle.team) on libSQL/SQLite.
 
-| File                        | Role                                                                    |
-| --------------------------- | ----------------------------------------------------------------------- |
-| `src/lib/auth.server.ts`    | better-auth instance (`getAuth()`), Drizzle adapter, plugins — server only |
-| `src/lib/auth-client.ts`    | Browser client (`signIn`, `signUp`, `signOut`, `useSession`)             |
-| `src/lib/session.ts`        | `fetchSession` server function + `sessionQueryOptions()` cache entry     |
-| `src/routes/api/auth/$.ts`  | Mounts every better-auth endpoint under `/api/auth/*`                    |
-| `src/db/auth-schema.ts`     | Generated Drizzle tables: `user`, `session`, `account`, `verification`   |
-| `src/db/client.server.ts`   | Lazy Drizzle/libSQL client (`getDb()`)                                   |
+| File                          | Role                                                                      |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| `src/lib/auth.server.ts`      | better-auth instance (`getAuth()`), Drizzle adapter, providers — server only |
+| `src/lib/auth-client.ts`      | Browser client (`signIn`, `signUp`, `signOut`, `useSession`)               |
+| `src/lib/session.ts`          | `fetchSession` server function + `sessionQueryOptions()` cache entry       |
+| `src/lib/auth-providers.ts`   | Tells the browser which social providers have credentials configured       |
+| `src/lib/auth-errors.ts`      | Maps better-auth's `?error=` OAuth codes to user-facing copy               |
+| `src/routes/api/auth/$.ts`    | Mounts every better-auth endpoint under `/api/auth/*`                      |
+| `src/db/auth-schema.ts`       | Generated Drizzle tables: `user`, `session`, `account`, `verification`     |
+| `src/db/client.server.ts`     | Lazy Drizzle/libSQL client (`getDb()`)                                     |
 
 Copy `.env.example` to `.env` and fill it in (`openssl rand -base64 32` for the secret),
 then create the tables:
@@ -60,6 +62,34 @@ export const Route = createFileRoute('/dashboard')({
 After changing the better-auth config (new plugins, `additionalFields`, …), regenerate the
 tables with `pnpm auth:generate`. The generator still emits legacy `relations()` helpers
 that drizzle-orm 1.x removed; delete those blocks from `src/db/auth-schema.ts` afterwards.
+
+### Google sign-in
+
+1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials), create an
+   **OAuth client ID** of type **Web application**.
+2. Add the callback as an *Authorized redirect URI*. It is always
+   `<BETTER_AUTH_URL>/api/auth/callback/google`, so it must match the origin the app is
+   served from — `http://localhost:3000/api/auth/callback/google` locally. A mismatch here
+   is what produces Google's `redirect_uri_mismatch` error.
+3. Put the credentials in `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+
+No migration is needed: OAuth identities live in the existing `account` table. Leaving both
+variables empty is supported — the provider is simply not registered and `/login` hides the
+Google button (`src/lib/auth-providers.ts` is what the page asks).
+
+Two choices worth knowing about, both in `src/lib/auth.server.ts`:
+
+- `accessType: "offline"` asks Google for a refresh token, because this app is meant to keep
+  reading the user's health data after the browser session ends. Google only issues one when
+  the user actually passes the consent screen — on the first grant, and whenever the
+  requested scopes change. Use `prompt: "select_account consent"` if a refresh token must be
+  guaranteed on *every* sign-in. Tokens are stored encrypted (`encryptOAuthTokens`), keyed off
+  `BETTER_AUTH_SECRET`; rotating that secret forces every user to consent again.
+- Account linking trusts Google's `email_verified` claim, but better-auth also requires the
+  *existing local* account to be verified before it merges the two. This app has no email
+  verification flow, so signing in with Google using an address that already has a password
+  account fails with `account_not_linked` — the login page explains that. Request extra Google
+  scopes later with `authClient.linkSocial({ provider: "google", scopes: [...] })`.
 
 ## Styling
 
