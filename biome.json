@@ -15,6 +15,8 @@
 			"**/vitest.config.ts",
 			"**/drizzle.config.ts",
 			"**/auth.config.ts",
+			"**/playwright.config.ts",
+			"**/e2e/**/*",
 			"package.json",
 			"tsconfig.json",
 			"tsr.config.json",
@@ -185,6 +187,10 @@
 			"linter": {
 				"rules": { "suspicious": { "noEmptyBlockStatements": "off" } }
 			}
+		},
+		{
+			"includes": ["**/playwright.config.ts"],
+			"linter": { "rules": { "style": { "noProcessEnv": "off" } } }
 		},
 		{
 			"includes": ["**/scripts/**"],

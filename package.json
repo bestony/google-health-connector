@@ -17,6 +17,8 @@
 		"check": "biome check",
 		"prepare": "lefthook install || true",
 		"test": "vitest run --config vitest.config.ts",
+		"test:e2e": "playwright test",
+		"test:e2e:production": "E2E_BASE_URL=https://www.stillwarm.app playwright test",
 		"test:coverage": "vitest run --config vitest.config.ts --coverage",
 		"test:pushdb": "npx drizzle-kit push",
 		"db:generate": "npx drizzle-kit generate",
@@ -60,6 +62,7 @@
 	},
 	"devDependencies": {
 		"@biomejs/biome": "2.4.5",
+		"@playwright/test": "^1.62.1",
 		"@tanstack/devtools-vite": "latest",
 		"@tanstack/router-cli": "^1.132.0",
 		"@types/node": "^22.10.2",

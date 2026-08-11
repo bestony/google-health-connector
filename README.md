@@ -9,6 +9,33 @@ pnpm install
 pnpm dev
 ```
 
+# End-to-end tests
+
+The Playwright suite checks the home page, the Privacy Policy, the Terms of
+Service, and the anonymous dashboard redirect to the sign-in page.
+
+Install the Chromium test browser once:
+
+```bash
+pnpm exec playwright install chromium
+```
+
+Run the suite against a local development server:
+
+```bash
+pnpm test:e2e
+```
+
+Playwright starts the local server at `http://127.0.0.1:3000` when it is not
+already running. Run the same cases against `https://www.stillwarm.app` with:
+
+```bash
+pnpm test:e2e:production
+```
+
+Set `E2E_BASE_URL` to test another deployed origin. Playwright does not start a
+local server when this variable points to a different origin.
+
 # Building For Production
 
 To build this application for production:
