@@ -25,9 +25,9 @@
 		"db:studio": "npx drizzle-kit studio",
 		"google-health:generate": "tsx scripts/generate-google-health-api.ts && biome check --write src/lib/google-health-api.gen.ts",
 		"auth:generate": "pnpm auth:generate:sqlite && pnpm auth:generate:postgresql && pnpm auth:generate:mysql",
-		"auth:generate:sqlite": "MCP_OAUTH_ENABLED=true DATABASE_URL=:memory: auth generate --config auth.config.ts --output src/db/schema/sqlite-auth.ts -y",
-		"auth:generate:postgresql": "MCP_OAUTH_ENABLED=true DATABASE_URL=postgres://generate@localhost/generate auth generate --config auth.config.ts --output src/db/schema/postgresql-auth.ts -y",
-		"auth:generate:mysql": "MCP_OAUTH_ENABLED=true DATABASE_URL=mysql://generate@localhost/generate auth generate --config auth.config.ts --output src/db/schema/mysql-auth.ts -y"
+		"auth:generate:sqlite": "MCP_OAUTH_ENABLED=true DATABASE_URL=:memory: auth generate --config auth.config.ts --output src/db/schema/sqlite-auth.ts -y && tsx scripts/normalize-auth-schema.ts sqlite && biome check --write src/db/schema/sqlite-auth.ts",
+		"auth:generate:postgresql": "MCP_OAUTH_ENABLED=true DATABASE_URL=postgres://generate@localhost/generate auth generate --config auth.config.ts --output src/db/schema/postgresql-auth.ts -y && tsx scripts/normalize-auth-schema.ts postgresql && biome check --write src/db/schema/postgresql-auth.ts",
+		"auth:generate:mysql": "MCP_OAUTH_ENABLED=true DATABASE_URL=mysql://generate@localhost/generate auth generate --config auth.config.ts --output src/db/schema/mysql-auth.ts -y && tsx scripts/normalize-auth-schema.ts mysql && biome check --write src/db/schema/mysql-auth.ts"
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.7.0",

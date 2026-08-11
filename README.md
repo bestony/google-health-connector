@@ -229,9 +229,10 @@ export const Route = createFileRoute('/dashboard')({
 
 After changing the better-auth config (new plugins, `additionalFields`, …), regenerate the
 tables with `pnpm auth:generate` — it rewrites `src/db/schema/<dialect>-auth.ts` for all
-three dialects. The generator still emits legacy `relations()` helpers that drizzle-orm 1.x
-removed; delete those blocks afterwards, and then generate a migration per dialect (see
-[Database](#database)).
+three dialects. The generator still emits legacy `relations()` helpers, unsupported MySQL
+JSON mode arguments, and mismatched MySQL foreign-key widths; the command's post-processor
+normalizes them and restores the repository headers before it generates the next dialect.
+Then generate a migration per dialect (see [Database](#database)).
 
 ### Google sign-in
 

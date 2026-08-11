@@ -132,8 +132,10 @@ registered and the UI hides the button (`src/lib/auth-providers.ts` is what the 
 asks). A *half*-filled credential pair is always a typo and is surfaced as such.
 
 After changing the better-auth config (plugins, `additionalFields`), run
-`pnpm auth:generate`, delete the legacy `relations()` blocks it still emits
-(drizzle-orm 1.x removed them), then generate a migration per dialect.
+`pnpm auth:generate`; its post-processor removes the legacy `relations()`
+blocks, MySQL-incompatible JSON mode arguments, and MySQL foreign-key width
+mismatches that the installed generators emit. Then generate a migration per
+dialect.
 
 `better-auth` and `@better-auth/oauth-provider` are an exact-version pair; pin
 both and upgrade them together so their peer graph cannot drift.

@@ -222,6 +222,12 @@ function createAuth() {
 							loginPage: "/login",
 							consentPage: "/consent",
 							scopes: [...MCP_OAUTH_SCOPES],
+							// Keep database token values at the provider's fixed 43-character
+							// SHA-256 base64url digest. This is intentionally explicit even
+							// though it is the default: MySQL generates varchar(255) for the
+							// unique access-token and refresh-token columns, so storing raw
+							// tokens here would make truncation a dialect-only production bug.
+							storeTokens: "hashed",
 							allowDynamicClientRegistration: true,
 							allowUnauthenticatedClientRegistration: true,
 							clientRegistrationDefaultScopes: [
