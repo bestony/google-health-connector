@@ -1,7 +1,8 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
-import { isLevelEnabled } from "../env.server";
+import { getAuthBaseUrl, isLevelEnabled } from "../env.server";
 import { createLogger } from "../logger.server";
-import { authenticateMcpRequest, type McpIdentity } from "./auth.server";
+import { authenticateMcpRequest } from "./auth.server";
+import { buildMcpWwwAuthenticate } from "./credential";
 import { createMcpServer } from "./server";
 
 /**
@@ -16,9 +17,9 @@ import { createMcpServer } from "./server";
  * what makes the route safe on a serverless host, where consecutive requests
  * routinely land on different instances.
  *
- * Authentication happens here, before any of that: a bad key is refused at the
- * HTTP layer, while a request with no key is passed through as anonymous and
- * left to `server.ts` to allow or refuse per operation.
+ * Authentication happens here, before any of that. Every request needs either
+ * an API key or a JWT OAuth access token, including `initialize` and
+ * `tools/list`; rejected credentials never reach the transport.
  */
 
 const log = createLogger("mcp:handler");
@@ -29,8 +30,12 @@ const INTERNAL_ERROR = -32603;
 /** JSON-RPC "server error" code, the reserved range for implementation-defined faults. */
 const UNAUTHORIZED_ERROR = -32001;
 
-/** Nobody presented a credential. Discovery is open; invocation is not. */
-const ANONYMOUS: McpIdentity = { authenticated: false };
+/** JSON-RPC server error used when a valid token lacks the protected scope. */
+const FORBIDDEN_ERROR = -32003;
+
+const EXPOSE_AUTH_HEADER = {
+	"Access-Control-Expose-Headers": "WWW-Authenticate",
+} as const;
 
 /**
  * Build a JSON-RPC error response.
@@ -88,21 +93,54 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
 
 	const auth = await authenticateMcpRequest(request);
 
+	if (auth.outcome === "error") {
+		log.error("authentication service failed", {
+			rpc: methods ?? null,
+			code: auth.code,
+		});
+		return jsonRpcErrorResponse(
+			500,
+			INTERNAL_ERROR,
+			"Authentication service unavailable.",
+		);
+	}
+
+	if (auth.outcome === "anonymous") {
+		log.warn("unauthorized", {
+			rpc: methods ?? null,
+			code: "MISSING_CREDENTIAL",
+		});
+		return jsonRpcErrorResponse(
+			401,
+			UNAUTHORIZED_ERROR,
+			"This MCP endpoint requires an API key or OAuth access token.",
+			{
+				...EXPOSE_AUTH_HEADER,
+				"WWW-Authenticate": buildMcpWwwAuthenticate(getAuthBaseUrl()),
+			},
+		);
+	}
+
 	if (auth.outcome === "rejected") {
-		// A credential was presented and it did not check out. `WWW-Authenticate`
-		// is what tells a client this is about the credential rather than about
-		// the request, which is the difference between "fix your key" and an
-		// afternoon spent reading the tool's arguments.
 		log.warn("unauthorized", {
 			rpc: methods ?? null,
 			code: auth.failure.code,
 		});
-		return jsonRpcErrorResponse(401, UNAUTHORIZED_ERROR, auth.failure.message, {
-			"WWW-Authenticate": 'Bearer realm="mcp"',
-		});
+		return jsonRpcErrorResponse(
+			auth.failure.status,
+			auth.failure.status === 403 ? FORBIDDEN_ERROR : UNAUTHORIZED_ERROR,
+			auth.failure.message,
+			{
+				...EXPOSE_AUTH_HEADER,
+				"WWW-Authenticate": buildMcpWwwAuthenticate(getAuthBaseUrl(), {
+					error: auth.failure.error,
+					description: auth.failure.message,
+				}),
+			},
+		);
 	}
 
-	const identity = auth.outcome === "authenticated" ? auth.identity : ANONYMOUS;
+	const identity = auth.identity;
 
 	const server = createMcpServer(identity);
 	const transport = new WebStandardStreamableHTTPServerTransport({
@@ -128,7 +166,8 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
 		const response = await transport.handleRequest(request);
 		log.debug("response", {
 			rpc: methods ?? null,
-			userId: identity.authenticated ? identity.userId : null,
+			userId: identity.userId,
+			credentialKind: identity.via ?? "api-key",
 			status: response.status,
 			durationMs: Math.round(performance.now() - startedAt),
 		});

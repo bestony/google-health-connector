@@ -1,118 +1,264 @@
-import { API_KEY_HEADER } from "../api-key-config";
+import { verifyAccessToken } from "better-auth/oauth2";
 import { getAuth } from "../auth.server";
+import { getAuthBaseUrl, isMcpOAuthEnabled } from "../env.server";
 import { createLogger } from "../logger.server";
+import {
+	consentScopesInclude,
+	describeCredentialRejection,
+	extractMcpCredential,
+	type McpIdentity,
+	mcpIdentityHasScope,
+	readUnverifiedJwtRoutingClaims,
+} from "./credential";
+import {
+	MCP_OAUTH_SCOPE,
+	mcpResourceUri,
+	oauthIssuer,
+	oauthJwksUrl,
+} from "./oauth-scopes";
 
-/**
- * Who is on the other end of an MCP request.
- *
- * The endpoint is deliberately open to anonymous callers: a client may connect,
- * `initialize` and list what is on offer without holding anything, because
- * discovery is how a user decides whether to bother getting a key at all.
- * Invoking is what needs one. `server.ts` is where that line is drawn — this
- * module only answers who is calling.
- */
-
-const log = createLogger("mcp:auth");
-
-export type McpIdentity =
-	/** No credential presented. Discovery only. */
-	| { authenticated: false }
-	/** A key was presented and it checks out. */
-	| { authenticated: true; userId: string; keyId: string };
-
-/** Why a presented key was refused. Distinguishes 401 from "no key at all". */
-export type McpAuthFailure = { code: string; message: string };
+/** One HTTP-authentication refusal safe to return to an unauthenticated client. */
+export type McpAuthFailure = {
+	status: 401 | 403;
+	code: string;
+	error: "insufficient_scope" | "invalid_token";
+	message: string;
+};
 
 export type McpAuthResult =
 	| { outcome: "anonymous" }
 	| { outcome: "authenticated"; identity: McpIdentity }
-	| { outcome: "rejected"; failure: McpAuthFailure };
+	| { outcome: "rejected"; failure: McpAuthFailure }
+	| { outcome: "error"; code: string };
 
-/** `Bearer <token>`, case-insensitively, with the token unpadded. */
-const BEARER_PATTERN = /^Bearer\s+(.+)$/i;
+export type { McpIdentity } from "./credential";
 
-/**
- * Pull the key out of the request.
- *
- * `Authorization: Bearer` first, because it is the header MCP clients can set
- * without extra configuration and therefore the one the docs tell users about.
- * `x-api-key` is the plugin's own default and what a `curl` example reaches
- * for, so it is accepted too rather than being a silent dead end.
- */
-export function extractApiKey(request: Request): string | null {
-	const authorization = request.headers.get("authorization");
-	const bearer = authorization?.match(BEARER_PATTERN)?.[1]?.trim();
-	if (bearer) return bearer;
+type AccessTokenClaims = Awaited<ReturnType<typeof verifyAccessToken>>;
 
-	return request.headers.get(API_KEY_HEADER)?.trim() || null;
+const log = createLogger("mcp:auth");
+const SCOPE_SEPARATOR = /\s+/;
+
+function rejected(
+	code: string,
+	message: string,
+	options?: {
+		status: 401 | 403;
+		error: "insufficient_scope" | "invalid_token";
+	},
+): McpAuthResult {
+	return {
+		outcome: "rejected",
+		failure: {
+			status: options?.status ?? 401,
+			code,
+			error: options?.error ?? "invalid_token",
+			message,
+		},
+	};
 }
 
-/**
- * Resolve the caller.
- *
- * Three outcomes, not two: a request with no credential is anonymous and
- * proceeds, while a request carrying a credential that does not check out is
- * *rejected*. Quietly demoting a bad key to anonymous would turn a typo — or an
- * expired key, or one the user just revoked — into a client that appears to work
- * until the first tool call comes back refusing to run, which is a far harder
- * thing to debug than a 401.
- */
-export async function authenticateMcpRequest(
-	request: Request,
-): Promise<McpAuthResult> {
-	const key = extractApiKey(request);
-
-	if (key === null) {
-		log.debug("anonymous request");
-		return { outcome: "anonymous" };
-	}
-
+async function authenticateApiKey(key: string): Promise<McpAuthResult> {
 	let result: Awaited<
 		ReturnType<ReturnType<typeof getAuth>["api"]["verifyApiKey"]>
 	>;
 	try {
-		// Verification also enforces the key's rate limit and its enabled flag, so
-		// this is the whole check, not just a lookup.
+		// Verification also enforces the key's rate limit and enabled flag.
 		result = await getAuth().api.verifyApiKey({ body: { key } });
 	} catch (error) {
 		log.error("api key verification failed", {
+			kind: "api-key",
 			error: error instanceof Error ? error.message : String(error),
 		});
-		return {
-			outcome: "rejected",
-			failure: { code: "VERIFICATION_FAILED", message: "Could not verify key" },
-		};
+		return { outcome: "error", code: "API_KEY_VERIFICATION_FAILED" };
 	}
 
 	if (!result.valid || result.key === null) {
-		// The plugin's reason (expired, disabled, rate limited, unknown) is worth
-		// logging, but it is not worth telling an unauthenticated caller which of
-		// those it was.
 		log.warn("rejected api key", {
+			kind: "api-key",
 			code: result.error?.code ?? null,
 			message: result.error?.message ?? null,
 		});
-		return {
-			outcome: "rejected",
-			failure: {
-				code: result.error?.code ?? "INVALID_API_KEY",
-				message: "Invalid API key",
-			},
-		};
+		return rejected(
+			result.error?.code ?? "INVALID_API_KEY",
+			"Invalid API key.",
+		);
 	}
 
-	// `referenceId` is the owning user's id — the plugin's generic name for it,
-	// since a key can just as well belong to an organization.
 	const identity: McpIdentity = {
 		authenticated: true,
+		via: "api-key",
 		userId: result.key.referenceId,
 		keyId: result.key.id,
 	};
-
 	log.debug("authenticated request", {
+		kind: "api-key",
 		userId: identity.userId,
 		keyId: identity.keyId,
 	});
-
 	return { outcome: "authenticated", identity };
+}
+
+async function verifyOAuthClaims(
+	token: string,
+	baseUrl: string,
+): Promise<
+	| { outcome: "verified"; claims: AccessTokenClaims }
+	| { outcome: "failed"; result: McpAuthResult }
+> {
+	const expectedIssuer = oauthIssuer(baseUrl);
+	const expectedAudience = mcpResourceUri(baseUrl);
+	try {
+		return {
+			outcome: "verified",
+			claims: await verifyAccessToken(token, {
+				jwksUrl: oauthJwksUrl(baseUrl),
+				verifyOptions: {
+					issuer: expectedIssuer,
+					audience: expectedAudience,
+				},
+			}),
+		};
+	} catch (error) {
+		const routingClaims = readUnverifiedJwtRoutingClaims(token);
+		const statusCode = (error as { statusCode?: unknown } | null)?.statusCode;
+		log.warn("oauth token verification failed", {
+			kind: "oauth",
+			expectedIssuer,
+			expectedAudience,
+			presentedIssuer: routingClaims.issuer,
+			presentedAudience: routingClaims.audience,
+			statusCode: typeof statusCode === "number" ? statusCode : null,
+			error: error instanceof Error ? error.message : String(error),
+		});
+		if (statusCode !== 401 && statusCode !== 403) {
+			return {
+				outcome: "failed",
+				result: { outcome: "error", code: "OAUTH_VERIFICATION_FAILED" },
+			};
+		}
+		const expired = error instanceof Error && error.message === "token expired";
+		return {
+			outcome: "failed",
+			result: rejected(
+				expired ? "EXPIRED_OAUTH_TOKEN" : "INVALID_OAUTH_TOKEN",
+				expired ? "OAuth access token expired." : "Invalid OAuth access token.",
+			),
+		};
+	}
+}
+
+function identityFromClaims(
+	claims: AccessTokenClaims,
+): Extract<McpIdentity, { via: "oauth" }> | null {
+	const userId = typeof claims.sub === "string" ? claims.sub.trim() : "";
+	const rawClientId = claims.client_id ?? claims.azp;
+	const clientId = typeof rawClientId === "string" ? rawClientId.trim() : "";
+	if (userId === "" || clientId === "") return null;
+	const scopes =
+		typeof claims.scope === "string"
+			? claims.scope.split(SCOPE_SEPARATOR).filter(Boolean)
+			: [];
+	return {
+		authenticated: true,
+		via: "oauth",
+		userId,
+		clientId,
+		scopes,
+	};
+}
+
+async function oauthConsentIsLive(
+	identity: Extract<McpIdentity, { via: "oauth" }>,
+) {
+	// The consent grant, not the browser session named by `sid`, owns liveness.
+	// Requiring a session row here would silently cap every OAuth connection at
+	// the seven-day web-session lifetime; signing out must not revoke the grant.
+	const context = await getAuth().$context;
+	const consent = await context.adapter.findOne<{ scopes: unknown }>({
+		model: "oauthConsent",
+		where: [
+			{ field: "userId", value: identity.userId },
+			{ field: "clientId", value: identity.clientId },
+		],
+		select: ["scopes"],
+	});
+	return consentScopesInclude(consent?.scopes, MCP_OAUTH_SCOPE);
+}
+
+async function authenticateOAuthToken(token: string): Promise<McpAuthResult> {
+	const baseUrl = getAuthBaseUrl();
+	if (!isMcpOAuthEnabled()) {
+		return rejected(
+			"OAUTH_DISABLED",
+			"OAuth access tokens are not enabled on this deployment.",
+		);
+	}
+
+	const verified = await verifyOAuthClaims(token, baseUrl);
+	if (verified.outcome === "failed") return verified.result;
+	const identity = identityFromClaims(verified.claims);
+	if (identity === null) {
+		log.warn("oauth token is missing identity claims", { kind: "oauth" });
+		return rejected(
+			"INVALID_OAUTH_CLAIMS",
+			"OAuth access token is missing its user or client identity.",
+		);
+	}
+	if (!mcpIdentityHasScope(identity, MCP_OAUTH_SCOPE)) {
+		return rejected(
+			"INSUFFICIENT_SCOPE",
+			`OAuth access token is missing the required ${MCP_OAUTH_SCOPE} scope.`,
+			{ status: 403, error: "insufficient_scope" },
+		);
+	}
+
+	try {
+		if (!(await oauthConsentIsLive(identity))) {
+			log.warn("oauth grant is no longer live", {
+				kind: "oauth",
+				userId: identity.userId,
+				clientId: identity.clientId,
+			});
+			return rejected(
+				"REVOKED_OAUTH_GRANT",
+				"The OAuth grant for this client is no longer active.",
+			);
+		}
+	} catch (error) {
+		log.error("oauth consent liveness check failed", {
+			kind: "oauth",
+			error: error instanceof Error ? error.message : String(error),
+		});
+		return { outcome: "error", code: "OAUTH_LIVENESS_CHECK_FAILED" };
+	}
+
+	log.debug("authenticated request", {
+		kind: "oauth",
+		userId: identity.userId,
+		clientId: identity.clientId,
+	});
+	return { outcome: "authenticated", identity };
+}
+
+/** Resolve one credential into an identity without cookies or introspection. */
+export async function authenticateMcpRequest(
+	request: Request,
+): Promise<McpAuthResult> {
+	const extraction = extractMcpCredential(request);
+	if (extraction.outcome === "none") {
+		log.debug("classified request credential", { kind: "none" });
+		return { outcome: "anonymous" };
+	}
+	if (extraction.outcome === "rejected") {
+		log.debug("classified request credential", { kind: extraction.kind });
+		const failure = describeCredentialRejection(extraction, getAuthBaseUrl());
+		return rejected(failure.code, failure.message);
+	}
+
+	log.debug("classified request credential", {
+		kind: extraction.credential.kind,
+	});
+	return extraction.credential.kind === "api-key"
+		? authenticateApiKey(extraction.credential.value)
+		: authenticateOAuthToken(extraction.credential.value);
 }

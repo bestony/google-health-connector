@@ -9,7 +9,7 @@ import {
 import { GoogleHealthAuthorizationError } from "../google-health-token.server";
 import { LEGAL } from "../legal";
 import { createLogger } from "../logger.server";
-import type { McpIdentity } from "./auth.server";
+import { type McpIdentity, mcpIdentityHasScope } from "./credential";
 import {
 	clampHistoryWindow,
 	describeDataTypes,
@@ -18,6 +18,7 @@ import {
 	scopeCategory,
 	summarizeDataPoint,
 } from "./health";
+import { MCP_OAUTH_SCOPE } from "./oauth-scopes";
 
 /**
  * Assembly of the MCP server: what tools this app exposes to an MCP client.
@@ -33,13 +34,13 @@ import {
  * request, so the handlers close over that request's identity rather than
  * reaching for something ambient.
  *
- * Discovery is open and invocation is not. Anyone may `initialize` and list the
- * tools — that is how a user decides whether a key is worth getting — but
- * calling one needs an API key. Nothing outside a tool handler touches Google
- * or the database, so an anonymous `tools/list` costs a listing and no more.
+ * Authentication is complete before this factory is called. The HTTP boundary
+ * requires either an API key or a scoped OAuth token even for `initialize` and
+ * `tools/list`, so every handler can close over one verified user.
  */
 
 const log = createLogger("mcp:server");
+const TRAILING_SLASHES = /\/+$/;
 
 /**
  * Advertised to clients during `initialize`.
@@ -74,30 +75,9 @@ const DEFAULT_LIMIT = 50;
  */
 const MAX_LIMIT = 500;
 
-/**
- * What an anonymous caller is told when it tries to invoke something.
- *
- * It names the credential, where to get one and which header carries it,
- * because whatever reads this message is relaying to a human who can act on
- * exactly those three facts. A request that reaches this point carried no key
- * at all — one that carried a bad key never got here, it was answered with 401.
- *
- * The dashboard link is built from the origin this deployment is configured
- * for, not from `LEGAL.siteUrl`: the client is already talking to *this* server,
- * so sending it to the canonical marketing domain would be sending it somewhere
- * it may have no account — and, on localhost or a preview deployment, somewhere
- * entirely unrelated.
- */
+/** Dashboard for resolving a missing or revoked Google Health connection. */
 function dashboardUrl(): string {
-	return `${getAuthBaseUrl().replace(/\/+$/, "")}/dashboard`;
-}
-
-function unauthorizedMessage(): string {
-	return (
-		`This ${LEGAL.appName} MCP server requires an API key to invoke ` +
-		`anything. Generate one on the dashboard at ${dashboardUrl()}, then send ` +
-		"it with every request as `Authorization: Bearer <key>`."
-	);
+	return `${getAuthBaseUrl().replace(TRAILING_SLASHES, "")}/dashboard`;
 }
 
 /** A tool result carrying text. */
@@ -154,24 +134,33 @@ function describeApiError(
 
 export function createMcpServer(identity: McpIdentity): McpServer {
 	const server = new McpServer(MCP_SERVER_INFO, {
-		// Stated up front rather than discovered on the first refusal: a client
-		// that knows the rules can ask its user for a key, and can pick a data
-		// type, before spending a call finding out.
+		// This copy is returned on every initialize response. Name both supported
+		// credentials so a model does not tell its user that an API key is the only
+		// way to connect after an OAuth client has already completed consent.
 		instructions:
 			`Read the signed-in user's Google Health data for ${LEGAL.appName}. ` +
 			"Call `list_health_data_types` first to see what can be queried, then " +
-			"`read_health_data` for a data type and time range. Listing the tools " +
-			"is open to anyone; calling one requires an API key sent as " +
-			`\`Authorization: Bearer <key>\`. Reads reach back at most ${HISTORY_LIMIT_DAYS} days.`,
+			"`read_health_data` for a data type and time range. Every request must " +
+			"use either an API key or an OAuth access token with the " +
+			`\`${MCP_OAUTH_SCOPE}\` scope. Reads reach back at most ${HISTORY_LIMIT_DAYS} days.`,
 	});
 
-	/** Refuses an anonymous caller, or hands over a client for the real one. */
-	function clientFor(tool: string) {
-		if (!identity.authenticated) {
-			log.info("refused tool: no api key", { tool });
-			return null;
-		}
+	function clientFor() {
 		return createGoogleHealthClient({ userId: identity.userId });
+	}
+
+	function missingScope(tool: string) {
+		if (mcpIdentityHasScope(identity, MCP_OAUTH_SCOPE)) return null;
+		log.warn("refused tool: missing oauth scope", {
+			tool,
+			userId: identity.userId,
+			clientId: identity.via === "oauth" ? identity.clientId : null,
+			requiredScope: MCP_OAUTH_SCOPE,
+		});
+		return text(
+			`This OAuth access token is missing the required ${MCP_OAUTH_SCOPE} scope.`,
+			true,
+		);
 	}
 
 	server.registerTool(
@@ -181,15 +170,14 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 			description:
 				"List every Google Health data type that can be queried, with how " +
 				"each one is timed. Call this before `read_health_data` rather than " +
-				"guessing an id. Requires an API key, but reaches nothing outside " +
+				"guessing an id. Requires authentication, but reaches nothing outside " +
 				"this server.",
 			inputSchema: {},
 			annotations: { readOnlyHint: true, openWorldHint: false },
 		},
 		() => {
-			if (!identity.authenticated) {
-				return text(unauthorizedMessage(), true);
-			}
+			const refusal = missingScope("list_health_data_types");
+			if (refusal !== null) return refusal;
 
 			return json({
 				dataTypes: describeDataTypes(),
@@ -238,8 +226,9 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 			annotations: { readOnlyHint: true, openWorldHint: true },
 		},
 		async ({ dataType, from, to, limit }) => {
-			const client = clientFor("read_health_data");
-			if (!client) return text(unauthorizedMessage(), true);
+			const refusal = missingScope("read_health_data");
+			if (refusal !== null) return refusal;
+			const client = clientFor();
 
 			const parsedFrom = from === undefined ? undefined : new Date(from);
 			const parsedTo = to === undefined ? undefined : new Date(to);
@@ -271,7 +260,7 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 				);
 
 				log.debug("read health data", {
-					userId: identity.authenticated ? identity.userId : null,
+					userId: identity.userId,
 					dataType,
 					points: points.length,
 					clamped: window.clamped,
@@ -324,8 +313,9 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 			annotations: { readOnlyHint: true, openWorldHint: true },
 		},
 		async () => {
-			const client = clientFor("get_health_profile");
-			if (!client) return text(unauthorizedMessage(), true);
+			const refusal = missingScope("get_health_profile");
+			if (refusal !== null) return refusal;
+			const client = clientFor();
 
 			try {
 				// Settings are a separate grant from the profile, so a user may have

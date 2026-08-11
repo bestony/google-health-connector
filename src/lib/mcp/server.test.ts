@@ -1,6 +1,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { MCP_OAUTH_SCOPE } from "./oauth-scopes";
 import { createMcpServer } from "./server";
 
 const {
@@ -82,33 +83,6 @@ describe("MCP server", () => {
 		createGoogleHealthClient.mockReset();
 	});
 
-	it("allows discovery and gives anonymous callers an actionable refusal", async () => {
-		const { client } = await connected({ authenticated: false });
-		const tools = await client.listTools();
-		expect(tools.tools.map((tool) => tool.name)).toEqual([
-			"list_health_data_types",
-			"read_health_data",
-			"get_health_profile",
-		]);
-		const result = await client.callTool({
-			name: "list_health_data_types",
-			arguments: {},
-		});
-		expect(result.isError).toBe(true);
-		expect(resultContents(result)[0]).toMatchObject({ type: "text" });
-		expect(resultText(result)).toContain("https://connector.example/dashboard");
-		const profile = await client.callTool({
-			name: "get_health_profile",
-			arguments: {},
-		});
-		expect(profile.isError).toBe(true);
-		const read = await client.callTool({
-			name: "read_health_data",
-			arguments: { dataType: "steps" },
-		});
-		expect(read.isError).toBe(true);
-	});
-
 	it("lists types and readable categories for an authenticated caller", async () => {
 		const { client } = await connected({
 			authenticated: true,
@@ -125,6 +99,73 @@ describe("MCP server", () => {
 		expect(payload.readableCategories).toEqual(
 			expect.arrayContaining(["sleep"]),
 		);
+	});
+
+	it("lets a scoped OAuth identity use all tools as its subject", async () => {
+		createGoogleHealthClient.mockReturnValue({
+			collectDataPoints: vi.fn(async () => []),
+			getProfile: vi.fn(async () => ({ heightCm: "180" })),
+			getSettings: vi.fn(async () => ({ distanceUnit: "km" })),
+		});
+		const { client } = await connected({
+			authenticated: true,
+			via: "oauth",
+			userId: "oauth-user",
+			clientId: "oauth-client",
+			scopes: [MCP_OAUTH_SCOPE],
+		});
+
+		const listed = await client.callTool({
+			name: "list_health_data_types",
+			arguments: {},
+		});
+		const read = await client.callTool({
+			name: "read_health_data",
+			arguments: { dataType: "steps" },
+		});
+		const profile = await client.callTool({
+			name: "get_health_profile",
+			arguments: {},
+		});
+
+		expect(listed.isError).not.toBe(true);
+		expect(read.isError).not.toBe(true);
+		expect(profile.isError).not.toBe(true);
+		expect(createGoogleHealthClient).toHaveBeenCalledTimes(2);
+		expect(createGoogleHealthClient).toHaveBeenCalledWith({
+			userId: "oauth-user",
+		});
+	});
+
+	it("refuses every tool before the network when OAuth scope is missing", async () => {
+		const { client } = await connected({
+			authenticated: true,
+			via: "oauth",
+			userId: "oauth-user",
+			clientId: "oauth-client",
+			scopes: ["openid"],
+		});
+
+		const results = await Promise.all([
+			client.callTool({
+				name: "list_health_data_types",
+				arguments: {},
+			}),
+			client.callTool({
+				name: "read_health_data",
+				arguments: { dataType: "steps" },
+			}),
+			client.callTool({
+				name: "get_health_profile",
+				arguments: {},
+			}),
+		]);
+
+		for (const result of results) {
+			expect(result.isError).toBe(true);
+			expect(resultText(result)).toContain(MCP_OAUTH_SCOPE);
+		}
+		expect(createGoogleHealthClient).not.toHaveBeenCalled();
 	});
 
 	it("reads data, clamps history and reports malformed dates", async () => {

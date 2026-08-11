@@ -551,28 +551,30 @@ granted, and the dashboard URL to change it.
 | ------------------------------ | ----------------------------------------------------------------- |
 | `src/lib/mcp/health.ts`        | Domain logic — clamping, summarising, the catalog. No MCP or HTTP types |
 | `src/lib/mcp/server.ts`        | `createMcpServer(identity)` — which tools and resources are exposed, and who may invoke them |
-| `src/lib/mcp/auth.server.ts`   | Who is calling: pulls the API key off the request and verifies it   |
+| `src/lib/mcp/credential.ts`    | Pure API-key/JWT classification, scope checks and OAuth challenge construction |
+| `src/lib/mcp/auth.server.ts`   | Verifies API keys or JWT access tokens and checks OAuth grant liveness |
 | `src/lib/mcp/handler.server.ts` | `Request` → `Response` bridge: transport, logging, teardown        |
 | `src/lib/mcp/endpoint.ts`      | The endpoint's absolute URL, for the dashboard's copy-paste snippet |
 | `src/routes/mcp.ts`            | The route itself                                                   |
 
 ### Who may do what
 
-Discovery is open, invocation is not. That split is the point: a client can connect,
-`initialize` and list the tools without holding anything, because that is how a user
-decides whether a key is worth getting. Calling a tool or reading a resource needs one.
+Every request to `/mcp` must authenticate, including `initialize` and `tools/list`.
+Anonymous discovery is not available; the RFC 9728 challenge is how a client discovers the
+authorization server before it has a credential.
 
-| Request                            | No key                             | Valid key | Bad key |
-| ---------------------------------- | ---------------------------------- | --------- | ------- |
-| `initialize`, `tools/list`, `resources/list` | works                    | works     | `401`   |
-| `tools/call`                       | result with `isError: true`        | works     | `401`   |
-| `resources/read`                   | JSON-RPC error `-32600`            | works     | `401`   |
+| Credential state | HTTP result |
+| ---------------- | ----------- |
+| No credential | `401` with the protected-resource metadata URL |
+| Valid API key | request proceeds |
+| Valid JWT OAuth access token with `mcp:health:read` | request proceeds |
+| Bad, expired or opaque credential | `401`, `error="invalid_token"` |
+| Valid OAuth token without `mcp:health:read` | `403`, `error="insufficient_scope"` |
 
-Three states, not two. A request carrying *no* credential is anonymous and proceeds; one
-carrying a credential that does not check out is rejected with `401` and
-`WWW-Authenticate: Bearer`. Quietly demoting a bad key to anonymous would turn a typo — or
-an expired key, or one the user just revoked — into a client that appears to work until the
-first tool call comes back refusing to run.
+API keys and OAuth access tokens share `Authorization: Bearer`, so the server classifies the
+credential before calling either verifier. The `ghc_` prefix wins over token shape, a
+three-segment compact JWS is OAuth, and every other bearer value is rejected. A non-Bearer
+authorization scheme is also rejected instead of being silently treated as anonymous.
 
 That `401` has a sequel. A client that gets one follows RFC 9728 and probes
 `/.well-known/oauth-protected-resource` with `Accept: application/json`. With
@@ -587,11 +589,23 @@ The OAuth issuer must be an HTTPS origin in production. Plain HTTP is supported 
 `http://192.168.1.10:3000` can produce a metadata issuer whose scheme does not match the JWT
 `iss` claim and is not a supported test deployment.
 
-The refusal a tool returns is in-band (`isError: true`) rather than a JSON-RPC error,
-because the protocol reserves those for a call that could not be *understood* and keeps
-failures of the call itself in the result, where the model can read the message and tell
-its user to go get a key. A resource read has no in-band error channel, so that one is a
-protocol error.
+The token endpoint issues a JWT access token only when the request includes
+`resource=<origin>/mcp`. Without that parameter it issues an opaque token, which this resource
+server cannot verify locally. The resulting `401` names the missing resource parameter rather
+than reporting only a generic invalid token.
+
+JWT signature verification is local against `/api/auth/jwks`, followed by one database read
+that confirms the `(user, client)` consent grant still exists and still covers
+`mcp:health:read`. Signing out does not revoke an OAuth grant or cap it at the seven-day browser
+session lifetime. Deleting the consent grant makes the `/mcp` liveness check fail immediately.
+A complete client revoke must also delete its refresh and opaque access-token rows so it cannot
+mint a replacement. Deleting the `jwks` rows is the global signing-key kill switch, but warm
+processes cache the fetched JWKS for up to five minutes; restart all serving instances as part
+of an emergency rotation when invalidation must be immediate.
+
+The tool handlers repeat the OAuth scope check as a belt-and-braces boundary. That in-band
+`isError: true` refusal is normally unreachable because the HTTP handler has already returned
+`403`, but it keeps a directly constructed MCP server from reaching Google without the scope.
 
 The key travels in `Authorization: Bearer <key>` — the header MCP clients can set without
 extra configuration — or in `x-api-key`, which is better-auth's own default and what a
@@ -608,7 +622,7 @@ rather than leaving a stale name behind.
 
 Exercise it by hand. The Streamable HTTP spec requires the client to accept **both**
 content types, so an `Accept: application/json` alone is answered with `406`. Drop the
-`Authorization` header and the same call comes back refusing to run:
+`Authorization` header and the same call is rejected with `401` before the transport runs:
 
 ```sh
 curl -s http://localhost:3000/mcp \

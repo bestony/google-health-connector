@@ -173,7 +173,8 @@ makes the route correct on serverless).
 ```
 src/lib/mcp/health.ts         domain logic — clamping, summarising, the catalog. No MCP/HTTP types
 src/lib/mcp/server.ts         createMcpServer(identity): which tools exist, who may invoke them
-src/lib/mcp/auth.server.ts    who is calling: API key off the request, verified
+src/lib/mcp/credential.ts     pure credential classification, scope and challenge decisions
+src/lib/mcp/auth.server.ts    API-key/JWT verification and OAuth consent-grant liveness
 src/lib/mcp/handler.server.ts Request -> Response bridge: transport, logging, teardown
 src/routes/mcp.ts             the route
 ```
@@ -182,11 +183,14 @@ Adding a tool: write it as a plain function in `health.ts` (or a sibling), then
 register it in `createMcpServer()`. Keeping logic out of the registration is what
 lets it be tested without a transport.
 
-Three states, not two: no credential → anonymous, and discovery (`initialize`,
-`tools/list`) proceeds; a bad credential → `401` (never a silent demotion to
-anonymous); a valid key → full access. Tool failures are returned with
-`isError: true` rather than thrown, so the model can read the reason and retry
-differently; resource reads have no in-band channel and use JSON-RPC `-32600`.
+Every `/mcp` request authenticates, including `initialize` and `tools/list`: no
+credential or a bad/opaque credential → `401`; a valid OAuth token without
+`mcp:health:read` → `403`; a valid API key or scoped OAuth token proceeds. Never
+demote a malformed `Authorization` header to anonymous. OAuth JWT verification
+is local, then one indexed consent read keeps explicit revocation immediate;
+browser-session expiry does not revoke the grant. Tool handlers repeat the scope
+check in-band so a directly constructed server still cannot reach Google without
+permission.
 
 ### Legal pages are a compliance surface, not decoration
 
