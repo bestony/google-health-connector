@@ -5,6 +5,7 @@ import {
 	consentScopesInclude,
 	describeCredentialRejection,
 	extractMcpCredential,
+	mcpAuthFailureNeedsChallenge,
 	mcpIdentityHasScope,
 	mcpResourceMetadataUrl,
 	readUnverifiedJwtRoutingClaims,
@@ -140,6 +141,7 @@ describe("MCP credential decisions", () => {
 			message:
 				"This server accepts only JWT access tokens. Request one from the " +
 				"token endpoint with resource=https://health.example/mcp.",
+			credentialKind: "oauth",
 		});
 		expect(
 			describeCredentialRejection(
@@ -154,6 +156,7 @@ describe("MCP credential decisions", () => {
 			code: "MALFORMED_BEARER_TOKEN",
 			message:
 				"Authorization: Bearer must include an API key or a JWT access token.",
+			credentialKind: "unknown",
 		});
 		expect(
 			describeCredentialRejection(
@@ -168,6 +171,7 @@ describe("MCP credential decisions", () => {
 			code: "OAUTH_TOKEN_IN_API_KEY_HEADER",
 			message:
 				"OAuth access tokens must use Authorization: Bearer <token>, not x-api-key.",
+			credentialKind: "oauth",
 		});
 		expect(
 			describeCredentialRejection(
@@ -181,7 +185,16 @@ describe("MCP credential decisions", () => {
 		).toEqual({
 			code: "UNSUPPORTED_AUTHORIZATION_SCHEME",
 			message: "Authorization must use the Bearer scheme.",
+			credentialKind: "unknown",
 		});
+	});
+
+	it.each([
+		["api-key", false],
+		["oauth", true],
+		["unknown", false],
+	] as const)("sets OAuth challenge policy for %s failures to %s", (credentialKind, expected) => {
+		expect(mcpAuthFailureNeedsChallenge(credentialKind)).toBe(expected);
 	});
 
 	it("treats absent and empty x-api-key headers as credential-less", () => {

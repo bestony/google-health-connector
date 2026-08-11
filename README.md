@@ -608,13 +608,17 @@ remain public.
 | No credential | `401` with the protected-resource metadata URL |
 | Valid API key | request proceeds as the key owner |
 | Valid JWT OAuth access token with `mcp:health:read` | request proceeds |
-| Bad, expired or opaque credential | `401`, `error="invalid_token"` |
+| Invalid API key, malformed bearer value or unsupported scheme | `401` without an OAuth challenge |
+| Invalid, expired or opaque OAuth credential | `401` with `error="invalid_token"` |
 | Valid OAuth token without `mcp:health:read` | `403`, `error="insufficient_scope"` |
 
 API keys and OAuth access tokens share `Authorization: Bearer`, so the server classifies the
 credential before calling either verifier. The `ghc_` prefix wins over token shape, a
 three-segment compact JWS is OAuth, and every other bearer value is rejected. A non-Bearer
 authorization scheme is also rejected instead of being silently treated as anonymous.
+Only a missing credential or an OAuth credential failure carries the discovery challenge.
+An invalid API key or an unknown credential shape returns `401` without starting dynamic
+client registration.
 
 ### OAuth discovery and consent
 

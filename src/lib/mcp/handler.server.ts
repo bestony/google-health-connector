@@ -2,7 +2,10 @@ import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/
 import { getAuthBaseUrl, isLevelEnabled } from "../env.server";
 import { createLogger } from "../logger.server";
 import { authenticateMcpRequest } from "./auth.server";
-import { buildMcpWwwAuthenticate } from "./credential";
+import {
+	buildMcpWwwAuthenticate,
+	mcpAuthFailureNeedsChallenge,
+} from "./credential";
 import { createMcpServer } from "./server";
 
 /**
@@ -125,18 +128,24 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
 		log.warn("unauthorized", {
 			rpc: methods ?? null,
 			code: auth.failure.code,
+			credentialKind: auth.failure.credentialKind,
 		});
+		const challengeHeaders = mcpAuthFailureNeedsChallenge(
+			auth.failure.credentialKind,
+		)
+			? {
+					...EXPOSE_AUTH_HEADER,
+					"WWW-Authenticate": buildMcpWwwAuthenticate(getAuthBaseUrl(), {
+						error: auth.failure.error,
+						description: auth.failure.message,
+					}),
+				}
+			: undefined;
 		return jsonRpcErrorResponse(
 			auth.failure.status,
 			auth.failure.status === 403 ? FORBIDDEN_ERROR : UNAUTHORIZED_ERROR,
 			auth.failure.message,
-			{
-				...EXPOSE_AUTH_HEADER,
-				"WWW-Authenticate": buildMcpWwwAuthenticate(getAuthBaseUrl(), {
-					error: auth.failure.error,
-					description: auth.failure.message,
-				}),
-			},
+			challengeHeaders,
 		);
 	}
 

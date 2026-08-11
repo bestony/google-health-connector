@@ -25,6 +25,8 @@ export type McpCredential =
 	| { kind: "api-key"; value: string }
 	| { kind: "oauth"; value: string };
 
+export type McpCredentialKind = McpCredential["kind"] | "unknown";
+
 export type McpCredentialExtraction =
 	| { outcome: "none" }
 	| { outcome: "credential"; credential: McpCredential }
@@ -46,6 +48,7 @@ export interface McpBearerChallengeError {
 export interface McpCredentialRejection {
 	code: string;
 	message: string;
+	credentialKind: McpCredentialKind;
 }
 
 const COMPACT_JWS = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
@@ -121,6 +124,7 @@ export function describeCredentialRejection(
 				code: "MALFORMED_BEARER_TOKEN",
 				message:
 					"Authorization: Bearer must include an API key or a JWT access token.",
+				credentialKind: "unknown",
 			};
 		case "opaque-bearer":
 			return {
@@ -128,19 +132,29 @@ export function describeCredentialRejection(
 				message:
 					"This server accepts only JWT access tokens. Request one from the " +
 					`token endpoint with resource=${oauthIssuer(baseUrl)}${MCP_ENDPOINT_PATH}.`,
+				credentialKind: "oauth",
 			};
 		case "oauth-in-api-key-header":
 			return {
 				code: "OAUTH_TOKEN_IN_API_KEY_HEADER",
 				message:
 					"OAuth access tokens must use Authorization: Bearer <token>, not x-api-key.",
+				credentialKind: "oauth",
 			};
 		case "unsupported-authorization-scheme":
 			return {
 				code: "UNSUPPORTED_AUTHORIZATION_SCHEME",
 				message: "Authorization must use the Bearer scheme.",
+				credentialKind: "unknown",
 			};
 	}
+}
+
+/** Whether a rejected credential should restart OAuth discovery. */
+export function mcpAuthFailureNeedsChallenge(
+	credentialKind: McpCredentialKind,
+): boolean {
+	return credentialKind === "oauth";
 }
 
 /** Protected-resource metadata URL advertised in every MCP auth challenge. */

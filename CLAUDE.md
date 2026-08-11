@@ -199,15 +199,16 @@ Adding a tool: write it as a plain function in `health.ts` (or a sibling), then
 register it in `createMcpServer()`. Keeping logic out of the registration is what
 lets it be tested without a transport.
 
-Every `/mcp` request authenticates, including `initialize` and `tools/list`. No
-credential gets a `401` OAuth challenge; a bad or opaque credential gets a `401`;
-a valid OAuth token without `mcp:health:read` gets a `403`. A valid API key is an
-owner credential, while an OAuth identity carries only its granted scopes. Never
-demote a malformed `Authorization` header to anonymous. OAuth JWT verification is
-local, then one indexed consent read keeps explicit revocation immediate;
-browser-session expiry does not revoke the grant. Tool handlers repeat the scope
-check in-band so a directly constructed server still cannot reach Google without
-permission.
+Every `/mcp` request authenticates, including `initialize` and `tools/list`. A
+request with no credential gets a `401` OAuth challenge. OAuth credential failures
+keep the challenge, including a `403` for a missing `mcp:health:read` scope.
+Invalid API keys and malformed or unsupported authorization values return `401`
+without a challenge. A valid API key is an owner credential, while an OAuth
+identity carries only its granted scopes. Never demote a malformed `Authorization`
+header to anonymous. OAuth JWT verification is local, then one indexed consent
+read keeps explicit revocation immediate; browser-session expiry does not revoke
+the grant. Tool handlers repeat the scope check in-band so a directly constructed
+server still cannot reach Google without permission.
 
 ### Legal pages are a compliance surface, not decoration
 

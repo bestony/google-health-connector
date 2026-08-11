@@ -6,6 +6,7 @@ import {
 	consentScopesInclude,
 	describeCredentialRejection,
 	extractMcpCredential,
+	type McpCredentialKind,
 	type McpIdentity,
 	mcpIdentityHasScope,
 	readUnverifiedJwtRoutingClaims,
@@ -23,6 +24,7 @@ export type McpAuthFailure = {
 	code: string;
 	error: "insufficient_scope" | "invalid_token";
 	message: string;
+	credentialKind: McpCredentialKind;
 };
 
 export type McpAuthResult =
@@ -39,6 +41,7 @@ const log = createLogger("mcp:auth");
 const SCOPE_SEPARATOR = /\s+/;
 
 function rejected(
+	credentialKind: McpCredentialKind,
 	code: string,
 	message: string,
 	options?: {
@@ -53,6 +56,7 @@ function rejected(
 			code,
 			error: options?.error ?? "invalid_token",
 			message,
+			credentialKind,
 		},
 	};
 }
@@ -79,6 +83,7 @@ async function authenticateApiKey(key: string): Promise<McpAuthResult> {
 			message: result.error?.message ?? null,
 		});
 		return rejected(
+			"api-key",
 			result.error?.code ?? "INVALID_API_KEY",
 			"Invalid API key.",
 		);
@@ -140,6 +145,7 @@ async function verifyOAuthClaims(
 		return {
 			outcome: "failed",
 			result: rejected(
+				"oauth",
 				expired ? "EXPIRED_OAUTH_TOKEN" : "INVALID_OAUTH_TOKEN",
 				expired ? "OAuth access token expired." : "Invalid OAuth access token.",
 			),
@@ -189,6 +195,7 @@ async function authenticateOAuthToken(token: string): Promise<McpAuthResult> {
 	const baseUrl = getAuthBaseUrl();
 	if (!isMcpOAuthEnabled()) {
 		return rejected(
+			"oauth",
 			"OAUTH_DISABLED",
 			"OAuth access tokens are not enabled on this deployment.",
 		);
@@ -200,12 +207,14 @@ async function authenticateOAuthToken(token: string): Promise<McpAuthResult> {
 	if (identity === null) {
 		log.warn("oauth token is missing identity claims", { kind: "oauth" });
 		return rejected(
+			"oauth",
 			"INVALID_OAUTH_CLAIMS",
 			"OAuth access token is missing its user or client identity.",
 		);
 	}
 	if (!mcpIdentityHasScope(identity, MCP_OAUTH_SCOPE)) {
 		return rejected(
+			"oauth",
 			"INSUFFICIENT_SCOPE",
 			`OAuth access token is missing the required ${MCP_OAUTH_SCOPE} scope.`,
 			{ status: 403, error: "insufficient_scope" },
@@ -220,6 +229,7 @@ async function authenticateOAuthToken(token: string): Promise<McpAuthResult> {
 				clientId: identity.clientId,
 			});
 			return rejected(
+				"oauth",
 				"REVOKED_OAUTH_GRANT",
 				"The OAuth grant for this client is no longer active.",
 			);
@@ -252,7 +262,7 @@ export async function authenticateMcpRequest(
 	if (extraction.outcome === "rejected") {
 		log.debug("classified request credential", { kind: extraction.kind });
 		const failure = describeCredentialRejection(extraction, getAuthBaseUrl());
-		return rejected(failure.code, failure.message);
+		return rejected(failure.credentialKind, failure.code, failure.message);
 	}
 
 	log.debug("classified request credential", {
