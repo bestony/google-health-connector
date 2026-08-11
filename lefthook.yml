@@ -1,5 +1,6 @@
 # Git hooks, installed by `lefthook install` (wired to `pnpm install` via the
-# `prepare` script). Skip once with `LEFTHOOK=0 git commit` / `git push --no-verify`.
+# `prepare` script). Git can bypass client-side hooks with `--no-verify`; the
+# matching GitHub Actions jobs remain the authoritative remote gate.
 
 pre-commit:
   commands:
@@ -11,12 +12,21 @@ pre-commit:
       stage_fixed: true
 
 pre-push:
-  commands:
-    check:
+  # Keep the expensive gates sequential. A failure stops the push before the
+  # next job starts, and the integration runner always uses an isolated database.
+  parallel: false
+  jobs:
+    - name: repository check
       # Full-repo gate: biome lint + format + import order (`pnpm check`).
       run: pnpm check
-    typecheck:
+
+    - name: typecheck
       run: pnpm exec tsc --noEmit
-    test:
+
+    - name: unit tests
       # Coverage thresholds (95%) are part of the gate, not just test results.
       run: pnpm test:coverage
+
+    - name: integration tests
+      # Fresh SQLite migrations, production build, and local Chromium smoke tests.
+      run: pnpm test:integration

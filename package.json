@@ -17,7 +17,7 @@
 		"check": "biome check",
 		"prepare": "lefthook install || true",
 		"test": "vitest run --config vitest.config.ts",
-		"test:integration": "pnpm db:migrate && pnpm build && pnpm test:e2e",
+		"test:integration": "tsx scripts/test-integration.ts",
 		"test:e2e": "playwright test",
 		"test:e2e:production": "E2E_BASE_URL=https://www.stillwarm.app playwright test",
 		"test:coverage": "vitest run --config vitest.config.ts --coverage",
