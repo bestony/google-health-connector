@@ -36,6 +36,21 @@ pnpm test:e2e:production
 Set `E2E_BASE_URL` to test another deployed origin. Playwright does not start a
 local server when this variable points to a different origin.
 
+For the full local integration path, provide a disposable SQLite database and
+the auth settings used by the test server:
+
+```bash
+DATABASE_URL=file:integration-test.db \
+BETTER_AUTH_SECRET=local-integration-test-secret \
+BETTER_AUTH_URL=http://127.0.0.1:3000 \
+MCP_OAUTH_ENABLED=false \
+pnpm test:integration
+```
+
+GitHub Actions runs the unit coverage gate and this integration path in separate
+jobs on every pull request and on pushes to `main`. The integration job applies
+SQLite migrations, builds the application, and runs the Chromium smoke suite.
+
 # Building For Production
 
 To build this application for production:

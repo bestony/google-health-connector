@@ -16,6 +16,8 @@ dist-ssr
 __unconfig*
 todos.json
 test.db
+integration-test.db
+ci-integration.db
 
 # Vite serves this directory verbatim at the site root, so it has to be
 # committed. It is re-included explicitly because a `Public/` rule in a global
