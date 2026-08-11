@@ -18,9 +18,11 @@ import {
 import { LEGAL } from "./legal";
 import { createLogger } from "./logger.server";
 import {
+	MCP_OAUTH_ACCEPTED_SCOPES,
+	MCP_OAUTH_ADVERTISED_SCOPES,
 	MCP_OAUTH_SCOPE,
-	MCP_OAUTH_SCOPES,
 	mcpOAuthAudiences,
+	oauthIssuer,
 } from "./mcp/oauth-scopes";
 
 /**
@@ -116,10 +118,11 @@ function createAuth() {
 		baseURL,
 		secret: getAuthSecret(),
 
-		// The JWT plugin otherwise exposes `GET /token`, which turns a cookie
-		// session into an audience-free JWT without an OAuth client, requested
-		// scopes or consent. OAuth tokens must leave through `/oauth2/token`, where
-		// those bindings are enforced together.
+		// The JWT plugin otherwise exposes `GET /api/auth/token`, which turns a
+		// cookie session into an audience-free JWT without an OAuth client,
+		// requested scopes or consent. This does not disable
+		// `POST /api/auth/oauth2/token`; OAuth tokens must leave through that
+		// endpoint, where those bindings are enforced together.
 		disabledPaths: mcpOAuthEnabled ? ["/token"] : [],
 
 		// Store counters in the shared database rather than process memory. A
@@ -212,16 +215,20 @@ function createAuth() {
 						 * The signing algorithm and curve must move only with a full JWK
 						 * rotation because stored rows do not retain those values.
 						 */
-						jwt({ jwt: { issuer: baseURL } }),
+						jwt({ jwt: { issuer: oauthIssuer(baseURL) } }),
 
 						// MCP clients discover and register themselves, so registration is
-						// open but deliberately rate-limited. Registration does not make a
-						// client trusted: every client still has to receive the user's consent
-						// before it can obtain the Google Health read scope.
+						// open but deliberately rate-limited. The provider forces these to be
+						// public clients, rejects client_credentials, requires PKCE S256 and
+						// rejects unsafe redirect schemes. Never pre-create a trusted client or
+						// set skipConsent: every client must receive the user's approval.
 						oauthProvider({
 							loginPage: "/login",
 							consentPage: "/consent",
-							scopes: [...MCP_OAUTH_SCOPES],
+							scopes: [...MCP_OAUTH_ACCEPTED_SCOPES],
+							advertisedMetadata: {
+								scopes_supported: [...MCP_OAUTH_ADVERTISED_SCOPES],
+							},
 							// Keep database token values at the provider's fixed 43-character
 							// SHA-256 base64url digest. This is intentionally explicit even
 							// though it is the default: MySQL generates varchar(255) for the
@@ -236,6 +243,13 @@ function createAuth() {
 								MCP_OAUTH_SCOPE,
 							],
 							validAudiences: mcpOAuthAudiences(baseURL),
+							// Root discovery routes are mounted explicitly because better-auth is
+							// served below /api/auth. These confirmations silence only the matching
+							// startup checks; no path-inserted metadata route is published.
+							silenceWarnings: {
+								oauthAuthServerConfig: true,
+								openidConfig: true,
+							},
 							rateLimit: {
 								token: { window: 60, max: 20 },
 								authorize: { window: 60, max: 30 },

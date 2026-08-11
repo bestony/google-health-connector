@@ -15,8 +15,8 @@ export const MCP_ENDPOINT_PATH = "/mcp";
 /** Permission to read the connected user's Google Health data through MCP. */
 export const MCP_OAUTH_SCOPE = "mcp:health:read";
 
-/** Every scope the authorization server advertises to OAuth clients. */
-export const MCP_OAUTH_SCOPES = [
+/** Every scope the authorization server accepts from OAuth clients. */
+export const MCP_OAUTH_ACCEPTED_SCOPES = [
 	"openid",
 	"profile",
 	"email",
@@ -24,11 +24,29 @@ export const MCP_OAUTH_SCOPES = [
 	MCP_OAUTH_SCOPE,
 ] as const;
 
+/** Scopes an MCP client should request from protected-resource metadata. */
+export const MCP_OAUTH_ADVERTISED_SCOPES = [
+	MCP_OAUTH_SCOPE,
+	"offline_access",
+] as const;
+
+const AUTH_BASE_PATH = "/api/auth";
+
 const TRAILING_SLASHES = /\/+$/;
+
+/** OAuth issuer for one deployment. It is always the bare public origin. */
+export function oauthIssuer(baseUrl: string): string {
+	return new URL(baseUrl).origin;
+}
+
+/** JWKS endpoint used to verify MCP JWT access tokens. */
+export function oauthJwksUrl(baseUrl: string): string {
+	return `${oauthIssuer(baseUrl)}${AUTH_BASE_PATH}/jwks`;
+}
 
 /** Absolute URI of the MCP protected resource for one deployment. */
 export function mcpResourceUri(baseUrl: string): string {
-	return `${baseUrl.replace(TRAILING_SLASHES, "")}${MCP_ENDPOINT_PATH}`;
+	return `${oauthIssuer(baseUrl.replace(TRAILING_SLASHES, ""))}${MCP_ENDPOINT_PATH}`;
 }
 
 /**
@@ -39,6 +57,17 @@ export function mcpResourceUri(baseUrl: string): string {
  * must recognize both while the resource server applies its own exact checks.
  */
 export function mcpOAuthAudiences(baseUrl: string): string[] {
-	const canonicalBaseUrl = baseUrl.replace(TRAILING_SLASHES, "");
-	return [mcpResourceUri(canonicalBaseUrl), canonicalBaseUrl];
+	const issuer = oauthIssuer(baseUrl);
+	return [mcpResourceUri(issuer), issuer];
+}
+
+/** RFC 9728 metadata shared by both protected-resource discovery paths. */
+export function protectedResourceMetadata(baseUrl: string) {
+	const issuer = oauthIssuer(baseUrl);
+	return {
+		resource: mcpResourceUri(issuer),
+		authorization_servers: [issuer],
+		scopes_supported: [...MCP_OAUTH_ADVERTISED_SCOPES],
+		bearer_methods_supported: ["header"],
+	};
 }

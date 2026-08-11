@@ -47,6 +47,17 @@ describe("HTML-only response correction", () => {
 		});
 	});
 
+	it("passes a successful JSON metadata document through untouched", async () => {
+		const request = new Request(
+			"https://example.test/.well-known/oauth-protected-resource",
+			{ headers: { Accept: "application/json" } },
+		);
+		const metadata = Response.json({
+			resource: "https://example.test/mcp",
+		});
+		expect(await replaceHtmlOnlyRefusal(request, metadata)).toBe(metadata);
+	});
+
 	it("passes through successful, HTML and unrelated error responses", async () => {
 		const request = new Request("https://example.test", {
 			headers: { Accept: "application/json" },

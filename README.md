@@ -117,6 +117,7 @@ migrations are applied.
 | `TURSO_AUTH_TOKEN`     | from `turso db tokens create`                              |
 | `BETTER_AUTH_SECRET`   | `openssl rand -base64 32` — rotating it makes every stored OAuth token undecryptable |
 | `BETTER_AUTH_URL`      | the deployed origin, e.g. `https://<project>.vercel.app`, no trailing slash |
+| `MCP_OAUTH_ENABLED`    | `true` only after the OAuth schema, discovery routes and MCP bearer verification are deployed |
 | `GOOGLE_CLIENT_ID`     | Google Cloud Console → Credentials                          |
 | `GOOGLE_CLIENT_SECRET` | Google Cloud Console → Credentials                          |
 | `LOG_LEVEL`            | optional; defaults to `error` in production                 |
@@ -128,6 +129,7 @@ vercel env add DATABASE_URL production
 vercel env add TURSO_AUTH_TOKEN production
 vercel env add BETTER_AUTH_SECRET production
 vercel env add BETTER_AUTH_URL production
+vercel env add MCP_OAUTH_ENABLED production
 vercel env add GOOGLE_CLIENT_ID production
 vercel env add GOOGLE_CLIENT_SECRET production
 ```
@@ -573,16 +575,17 @@ an expired key, or one the user just revoked — into a client that appears to w
 first tool call comes back refusing to run.
 
 That `401` has a sequel. A client that gets one follows RFC 9728 and probes
-`/.well-known/oauth-protected-resource` with `Accept: application/json`, looking for OAuth
-metadata this server deliberately does not publish — it authenticates with API keys. The
-honest answer is `404`: no OAuth here, send the key. It takes `src/server.ts` to give it,
-because TanStack Start's SSR handler answers **500** to any request whose `Accept` is
-neither `text/html` nor the wildcard, for every page route and unmatched path alike. A 500
-says the server is broken and invites a retry; nothing is broken, the caller asked for a
-representation that does not exist. `src/lib/html-only-refusal.server.ts` matches that one
-response by its exact body and swaps it for a `404` — by body rather than by "a 500 that is
-JSON", because `/mcp` returns a JSON 500 of its own when a tool genuinely fails and that has
-to reach the caller untouched.
+`/.well-known/oauth-protected-resource` with `Accept: application/json`. With
+`MCP_OAUTH_ENABLED=true`, explicit server routes publish the protected-resource,
+authorization-server and OpenID metadata; with the switch off, the same routes fail closed
+with `404`. `src/lib/html-only-refusal.server.ts` remains the fallback for a misspelled
+discovery URL or another unmatched non-HTML path: it converts TanStack Start's HTML-only
+`500` refusal into an honest `404` without touching a real JSON API response.
+
+The OAuth issuer must be an HTTPS origin in production. Plain HTTP is supported for
+`localhost`, `127.0.0.0/8` and `::1` development only; a LAN URL such as
+`http://192.168.1.10:3000` can produce a metadata issuer whose scheme does not match the JWT
+`iss` claim and is not a supported test deployment.
 
 The refusal a tool returns is in-band (`isError: true`) rather than a JSON-RPC error,
 because the protocol reserves those for a call that could not be *understood* and keeps
