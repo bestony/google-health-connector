@@ -19,6 +19,12 @@ import {
 	LEGAL_RETENTION,
 } from "./legal";
 import {
+	MCP_OAUTH_SCOPE,
+	MCP_OAUTH_SCOPES,
+	mcpOAuthAudiences,
+	mcpResourceUri,
+} from "./mcp/oauth-scopes";
+import {
 	FREE_HISTORY_DAYS,
 	MCP_CLIENTS,
 	PLANS,
@@ -59,6 +65,27 @@ describe("shared product facts", () => {
 		);
 		expect(isGoogleHealthScope(GOOGLE_HEALTH_SCOPES.at(0) ?? "")).toBe(true);
 		expect(isGoogleHealthScope("openid")).toBe(false);
+	});
+
+	it("defines the MCP OAuth scope and canonical audiences", () => {
+		expect(MCP_OAUTH_SCOPES).toEqual([
+			"openid",
+			"profile",
+			"email",
+			"offline_access",
+			MCP_OAUTH_SCOPE,
+		]);
+		expect(new Set(MCP_OAUTH_SCOPES).size).toBe(MCP_OAUTH_SCOPES.length);
+		expect(mcpResourceUri("https://health.example")).toBe(
+			"https://health.example/mcp",
+		);
+		expect(mcpResourceUri("https://health.example///")).toBe(
+			"https://health.example/mcp",
+		);
+		expect(mcpOAuthAudiences("https://health.example/")).toEqual([
+			"https://health.example/mcp",
+			"https://health.example",
+		]);
 	});
 
 	it("keeps pricing and plan claims internally consistent", () => {

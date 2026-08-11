@@ -1,7 +1,8 @@
 import { apiKey } from "@better-auth/api-key";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { oneTap } from "better-auth/plugins";
+import { jwt, oneTap } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getDb } from "../db/client.server";
 import type { DatabaseDialect } from "../db/dialect";
@@ -15,6 +16,11 @@ import {
 } from "./env.server";
 import { LEGAL } from "./legal";
 import { createLogger } from "./logger.server";
+import {
+	MCP_OAUTH_SCOPE,
+	MCP_OAUTH_SCOPES,
+	mcpOAuthAudiences,
+} from "./mcp/oauth-scopes";
 
 /**
  * better-auth server instance, backed by Drizzle on whichever database
@@ -107,6 +113,12 @@ function createAuth() {
 		baseURL,
 		secret: getAuthSecret(),
 
+		// The JWT plugin otherwise exposes `GET /token`, which turns a cookie
+		// session into an audience-free JWT without an OAuth client, requested
+		// scopes or consent. OAuth tokens must leave through `/oauth2/token`, where
+		// those bindings are enforced together.
+		disabledPaths: ["/token"],
+
 		// Drizzle owns the schema; `schema` must be passed explicitly because
 		// drizzle-orm 1.x no longer exposes `db._.fullSchema`. It has to be the
 		// one matching `dialect` — the tables carry the same names across all
@@ -175,6 +187,36 @@ function createAuth() {
 					enabled: true,
 					timeWindow: API_KEY_RATE_LIMIT.timeWindow,
 					maxRequests: API_KEY_RATE_LIMIT.maxRequests,
+				},
+			}),
+
+			// OAuth access and ID tokens are signed by the JWT plugin, whose JWKS
+			// endpoint lets resource servers verify them without sharing a secret.
+			// The direct session-to-JWT endpoint it also supplies is disabled above.
+			jwt(),
+
+			// MCP clients discover and register themselves, so registration is open
+			// but deliberately rate-limited. Registration does not make a client
+			// trusted: every client still has to receive the user's consent before it
+			// can obtain the Google Health read scope.
+			oauthProvider({
+				loginPage: "/login",
+				consentPage: "/consent",
+				scopes: [...MCP_OAUTH_SCOPES],
+				allowDynamicClientRegistration: true,
+				allowUnauthenticatedClientRegistration: true,
+				clientRegistrationDefaultScopes: [
+					"openid",
+					"offline_access",
+					MCP_OAUTH_SCOPE,
+				],
+				validAudiences: mcpOAuthAudiences(baseURL),
+				rateLimit: {
+					token: { window: 60, max: 20 },
+					authorize: { window: 60, max: 30 },
+					introspect: { window: 60, max: 100 },
+					revoke: { window: 60, max: 30 },
+					register: { window: 60, max: 5 },
 				},
 			}),
 
