@@ -7,6 +7,7 @@ import {
 	useRouterState,
 } from "@tanstack/react-router";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
+import { AppErrorPage } from "../components/app-error-page";
 import { SiteFooter } from "../components/site-footer";
 import { SiteHeader } from "../components/site-header";
 import TanStackQueryDevtools from "../integrations/tanstack-query/devtools";
@@ -29,6 +30,8 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 		);
 		return { session };
 	},
+	errorComponent: () => <AppErrorPage kind="error" />,
+	notFoundComponent: () => <AppErrorPage kind="not-found" />,
 	head: () => ({
 		meta: [
 			{
@@ -65,7 +68,7 @@ function RootDocument({ children }: { children: React.ReactNode }) {
 	// header re-renders when the visitor signs in or out, or when they arrive at
 	// or leave `/login`, and not on every other state change.
 	const signedIn = Route.useRouteContext({
-		select: (context) => context.session !== null,
+		select: (context) => Boolean(context.session),
 	});
 	const onLoginPage = useRouterState({
 		select: (state) => state.location.pathname === "/login",
