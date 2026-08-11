@@ -43,6 +43,11 @@ function sanitizeRedirect(value: unknown): string | undefined {
  * `undefined`: TanStack derives the type callers must pass to `<Link search>`
  * from this shape, and nothing linking to `/login` should have to name the
  * OAuth params just to satisfy it.
+ *
+ * Real-browser verification confirms that dropping those unknown provider
+ * fields here does not rewrite `window.location.search` during hydration. The
+ * OAuth client plugin therefore still reads the original signed query,
+ * including repeated `ba_param` fields and its original percent encoding.
  */
 interface LoginSearch {
 	redirect?: string;

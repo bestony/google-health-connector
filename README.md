@@ -669,7 +669,16 @@ HMAC to its authorization query. The browser plugin attaches the unchanged signe
 `oauth_query` to non-GET auth requests, so login and consent resume the request the server
 issued instead of accepting browser-authored scopes or redirects. Consequently, `sig` is a
 reserved query parameter across this application. Routes must preserve it and must not reuse
-it for another feature.
+it for another feature. A real-browser hydration check confirmed that `validateLoginSearch`
+can omit provider fields from its typed result without rewriting `window.location.search`:
+repeated `ba_param` fields and percent encoding remain byte-identical. The plugin reads that
+browser query directly, so no hidden-field fallback is needed.
+
+**Discovery uses two intentional scope sets.** Protected-resource metadata advertises only
+`mcp:health:read` and `offline_access`, because the MCP SDK requests every scope in that list.
+Authorization-server and OIDC metadata advertise the full accepted set: `openid`, `profile`,
+`email`, `offline_access` and `mcp:health:read`. The broader server list cannot add scopes to
+the MCP consent screen; the protected-resource document remains the client's request source.
 
 The provider has no `signUp.page`, `selectAccount.page` or `postLogin` configuration.
 Therefore `prompt=select_account` fails with `unsupported_prompt_select_account`, while
@@ -722,7 +731,11 @@ curl -si http://localhost:3000/mcp \
   -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
 
 curl -s http://localhost:3000/.well-known/oauth-protected-resource/mcp
+# scopes_supported: ["mcp:health:read", "offline_access"]
+
 curl -s http://localhost:3000/.well-known/oauth-authorization-server
+curl -s http://localhost:3000/.well-known/openid-configuration
+# scopes_supported: ["openid", "profile", "email", "offline_access", "mcp:health:read"]
 ```
 
 After an OAuth client obtains a JWT with `resource=http://localhost:3000/mcp`, its call and

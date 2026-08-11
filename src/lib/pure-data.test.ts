@@ -21,7 +21,7 @@ import {
 import {
 	MCP_ENDPOINT_PATH,
 	MCP_OAUTH_ACCEPTED_SCOPES,
-	MCP_OAUTH_ADVERTISED_SCOPES,
+	MCP_OAUTH_RESOURCE_SCOPES,
 	MCP_OAUTH_SCOPE,
 	mcpOAuthAudiences,
 	mcpResourceUri,
@@ -81,7 +81,7 @@ describe("shared product facts", () => {
 			"offline_access",
 			MCP_OAUTH_SCOPE,
 		]);
-		expect(MCP_OAUTH_ADVERTISED_SCOPES).toEqual([
+		expect(MCP_OAUTH_RESOURCE_SCOPES).toEqual([
 			MCP_OAUTH_SCOPE,
 			"offline_access",
 		]);
@@ -89,10 +89,12 @@ describe("shared product facts", () => {
 			MCP_OAUTH_ACCEPTED_SCOPES.length,
 		);
 		expect(
-			MCP_OAUTH_ADVERTISED_SCOPES.every((scope) =>
+			MCP_OAUTH_RESOURCE_SCOPES.every((scope) =>
 				MCP_OAUTH_ACCEPTED_SCOPES.includes(scope),
 			),
 		).toBe(true);
+		expect(MCP_OAUTH_RESOURCE_SCOPES).not.toContain("openid");
+		expect(MCP_OAUTH_ACCEPTED_SCOPES).toContain("openid");
 		expect(oauthIssuer("https://health.example/base/path")).toBe(
 			"https://health.example",
 		);

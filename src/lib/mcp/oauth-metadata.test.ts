@@ -1,4 +1,8 @@
-import { describe, expect, it } from "vitest";
+import {
+	oauthProviderAuthServerMetadata,
+	oauthProviderOpenIdConfigMetadata,
+} from "@better-auth/oauth-provider";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
 	OAUTH_METADATA_CORS_HEADERS,
 	oauthMetadataHeadResponse,
@@ -6,6 +10,12 @@ import {
 	oauthMetadataUnavailableResponse,
 	protectedResourceMetadataResponse,
 } from "./oauth-metadata";
+import { MCP_OAUTH_ACCEPTED_SCOPES, MCP_OAUTH_SCOPE } from "./oauth-scopes";
+
+afterEach(() => {
+	vi.unstubAllEnvs();
+	vi.resetModules();
+});
 
 describe("OAuth metadata responses", () => {
 	it("builds a browser-readable protected-resource document", async () => {
@@ -19,6 +29,49 @@ describe("OAuth metadata responses", () => {
 			resource: "https://health.example/mcp",
 			authorization_servers: ["https://health.example"],
 		});
+	});
+
+	it("keeps protected-resource and authorization-server scope sets distinct", async () => {
+		vi.stubEnv("DATABASE_URL", ":memory:");
+		vi.stubEnv(
+			"BETTER_AUTH_SECRET",
+			"test-secret-at-least-thirty-two-characters",
+		);
+		vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000");
+		vi.stubEnv("MCP_OAUTH_ENABLED", "true");
+		vi.stubEnv("LOG_LEVEL", "error");
+
+		const { getAuth } = await import("../auth.server");
+		const authorizationServerResponse = await oauthProviderAuthServerMetadata(
+			getAuth(),
+		)(
+			new Request(
+				"http://localhost:3000/.well-known/oauth-authorization-server",
+			),
+		);
+		const openIdResponse = await oauthProviderOpenIdConfigMetadata(getAuth())(
+			new Request("http://localhost:3000/.well-known/openid-configuration"),
+		);
+		const protectedResourceResponse = protectedResourceMetadataResponse(
+			"http://localhost:3000",
+		);
+
+		const authorizationServer = await authorizationServerResponse.json();
+		const openId = await openIdResponse.json();
+		const protectedResource = await protectedResourceResponse.json();
+
+		expect(protectedResource.scopes_supported).toEqual([
+			MCP_OAUTH_SCOPE,
+			"offline_access",
+		]);
+		expect(protectedResource.scopes_supported).not.toContain("openid");
+		expect(authorizationServer.scopes_supported).toEqual([
+			...MCP_OAUTH_ACCEPTED_SCOPES,
+		]);
+		expect(authorizationServer.scopes_supported).toContain("openid");
+		expect(openId.scopes_supported).toEqual(
+			authorizationServer.scopes_supported,
+		);
 	});
 
 	it("returns CORS preflight and fail-closed responses", async () => {

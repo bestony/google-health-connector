@@ -15,7 +15,7 @@ export const MCP_ENDPOINT_PATH = "/mcp";
 /** Permission to read the connected user's Google Health data through MCP. */
 export const MCP_OAUTH_SCOPE = "mcp:health:read";
 
-/** Every scope the authorization server accepts from OAuth clients. */
+/** Every scope the authorization server accepts and advertises to OAuth clients. */
 export const MCP_OAUTH_ACCEPTED_SCOPES = [
 	"openid",
 	"profile",
@@ -24,8 +24,14 @@ export const MCP_OAUTH_ACCEPTED_SCOPES = [
 	MCP_OAUTH_SCOPE,
 ] as const;
 
-/** Scopes an MCP client should request from protected-resource metadata. */
-export const MCP_OAUTH_ADVERTISED_SCOPES = [
+/**
+ * Scopes an MCP client should request from protected-resource metadata.
+ *
+ * Keep this narrower than the authorization-server documents. The MCP SDK
+ * requests every scope listed by the protected resource, which would put
+ * unrelated OIDC profile scopes on the MCP consent screen.
+ */
+export const MCP_OAUTH_RESOURCE_SCOPES = [
 	MCP_OAUTH_SCOPE,
 	"offline_access",
 ] as const;
@@ -67,7 +73,7 @@ export function protectedResourceMetadata(baseUrl: string) {
 	return {
 		resource: mcpResourceUri(issuer),
 		authorization_servers: [issuer],
-		scopes_supported: [...MCP_OAUTH_ADVERTISED_SCOPES],
+		scopes_supported: [...MCP_OAUTH_RESOURCE_SCOPES],
 		bearer_methods_supported: ["header"],
 	};
 }

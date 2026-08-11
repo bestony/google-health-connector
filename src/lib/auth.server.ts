@@ -19,7 +19,6 @@ import { LEGAL } from "./legal";
 import { createLogger } from "./logger.server";
 import {
 	MCP_OAUTH_ACCEPTED_SCOPES,
-	MCP_OAUTH_ADVERTISED_SCOPES,
 	MCP_OAUTH_SCOPE,
 	mcpOAuthAudiences,
 	oauthIssuer,
@@ -227,8 +226,11 @@ function createAuth() {
 							loginPage: "/login",
 							consentPage: "/consent",
 							scopes: [...MCP_OAUTH_ACCEPTED_SCOPES],
+							// AS and OIDC discovery describe every accepted scope. Protected-
+							// resource metadata has its own narrower MCP request set so profile
+							// scopes do not appear on the MCP consent screen by default.
 							advertisedMetadata: {
-								scopes_supported: [...MCP_OAUTH_ADVERTISED_SCOPES],
+								scopes_supported: [...MCP_OAUTH_ACCEPTED_SCOPES],
 							},
 							// Keep database token values at the provider's fixed 43-character
 							// SHA-256 base64url digest. This is intentionally explicit even
