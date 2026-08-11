@@ -6,6 +6,7 @@ import {
 	revokeApiKey,
 } from "../lib/api-key";
 import { API_KEY_PREFIX } from "../lib/api-key-config";
+import type { McpConnectionDetails } from "../lib/mcp/endpoint";
 
 /**
  * The API key card on the dashboard.
@@ -28,8 +29,8 @@ import { API_KEY_PREFIX } from "../lib/api-key-config";
 interface ApiKeyCardProps {
 	/** What the server knows about this user's key. */
 	status: ApiKeyStatus;
-	/** Absolute URL of this deployment's MCP endpoint, for the snippet. */
-	mcpUrl: string;
+	/** Server-derived connection commands for this deployment's MCP endpoint. */
+	mcpConnection: McpConnectionDetails;
 	/** Refetches `status` after this card changes it. */
 	onChanged: () => Promise<void>;
 }
@@ -37,7 +38,11 @@ interface ApiKeyCardProps {
 /** Which destructive action is waiting for a second click. */
 type Pending = "issue" | "regenerate" | "revoke" | null;
 
-export function ApiKeyCard({ status, mcpUrl, onChanged }: ApiKeyCardProps) {
+export function ApiKeyCard({
+	status,
+	mcpConnection,
+	onChanged,
+}: ApiKeyCardProps) {
 	/** The plaintext key, for as long as this page stays open. */
 	const [issued, setIssued] = useState<string | null>(null);
 	const [confirming, setConfirming] = useState<Exclude<Pending, "issue">>(null);
@@ -107,9 +112,9 @@ export function ApiKeyCard({ status, mcpUrl, onChanged }: ApiKeyCardProps) {
 			</header>
 
 			<p className="mt-2 max-w-prose text-sm text-muted-foreground">
-				One key per account. It is what an MCP client sends to prove a request
-				is yours — anyone holding it can call your tools as you, so treat it
-				like a password and paste it only into a client you run.
+				One key per account. It is the manual owner credential for an MCP client
+				that does not use OAuth. Anyone holding it can call your tools as you,
+				so treat it like a password and paste it only into a client you trust.
 			</p>
 
 			{status.status === "unavailable" && (
@@ -210,7 +215,7 @@ export function ApiKeyCard({ status, mcpUrl, onChanged }: ApiKeyCardProps) {
 
 			{error && <p className="mt-3 text-sm text-destructive">{error}</p>}
 
-			<ConnectSnippet mcpUrl={mcpUrl} />
+			<ConnectSnippet connection={mcpConnection} />
 		</section>
 	);
 }
@@ -267,7 +272,7 @@ function KeyDetails({ summary }: { summary: ApiKeySummary }) {
  * it is the origin the app is actually configured for — which is the one Google
  * and the OAuth redirect already have to agree on.
  */
-function ConnectSnippet({ mcpUrl }: { mcpUrl: string }) {
+function ConnectSnippet({ connection }: { connection: McpConnectionDetails }) {
 	return (
 		<details className="mt-5">
 			<summary className="cursor-pointer text-sm font-medium">
@@ -275,13 +280,23 @@ function ConnectSnippet({ mcpUrl }: { mcpUrl: string }) {
 			</summary>
 
 			<p className="mt-3 max-w-prose text-sm text-muted-foreground">
-				Point any MCP client at the endpoint below and send the key on every
-				request. Without one a client can still connect and list the tools — it
-				just cannot call them.
+				An OAuth-capable client starts authorization from the endpoint's 401
+				challenge, with no pasted credential. Use an API key only when the
+				client requires manual authentication.
 			</p>
 
+			<p className="mt-3 text-xs font-medium uppercase text-muted-foreground">
+				OAuth
+			</p>
 			<pre className="mt-3 overflow-x-auto rounded-md border border-border bg-muted p-3 font-mono text-xs">
-				{`claude mcp add --transport http ghealth ${mcpUrl} \\\n  --header "Authorization: Bearer YOUR_KEY"`}
+				{connection.oauthCommand}
+			</pre>
+
+			<p className="mt-3 text-xs font-medium uppercase text-muted-foreground">
+				API key
+			</p>
+			<pre className="mt-3 overflow-x-auto rounded-md border border-border bg-muted p-3 font-mono text-xs">
+				{connection.apiKeyCommand}
 			</pre>
 		</details>
 	);

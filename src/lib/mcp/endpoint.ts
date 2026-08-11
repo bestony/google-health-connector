@@ -21,16 +21,31 @@ import { MCP_ENDPOINT_PATH } from "./oauth-scopes";
 
 const log = createLogger("mcp:endpoint");
 
+const TRAILING_SLASHES = /\/+$/;
+
 export const MCP_ENDPOINT_QUERY_KEY = ["mcp", "endpoint"] as const;
 
+export interface McpConnectionDetails {
+	/** Absolute URL of this deployment's MCP endpoint. */
+	url: string;
+	/** OAuth-capable Claude Code command. The initial request has no credential. */
+	oauthCommand: string;
+	/** Manual owner-credential command for clients configured with an API key. */
+	apiKeyCommand: string;
+}
+
 export const fetchMcpEndpoint = createServerFn({ method: "GET" }).handler(
-	async (): Promise<string> => {
+	async (): Promise<McpConnectionDetails> => {
 		// `BETTER_AUTH_URL` is read verbatim from the environment, so it may well
 		// arrive with a trailing slash; better-auth tolerates that but a naive
 		// concatenation would print `https://host//mcp` into the snippet.
-		const url = `${getAuthBaseUrl().replace(/\/+$/, "")}${MCP_ENDPOINT_PATH}`;
+		const url = `${getAuthBaseUrl().replace(TRAILING_SLASHES, "")}${MCP_ENDPOINT_PATH}`;
 		log.debug("resolved mcp endpoint", { url });
-		return url;
+		return {
+			url,
+			oauthCommand: `claude mcp add --transport http ghealth ${url}`,
+			apiKeyCommand: `claude mcp add --transport http ghealth ${url} \\\n  --header "Authorization: Bearer YOUR_KEY"`,
+		};
 	},
 );
 

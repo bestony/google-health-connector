@@ -117,8 +117,8 @@ export interface GoogleHealthClientOptions {
 	requiredScopes?: readonly string[];
 	/**
 	 * Act for this user rather than for whoever the request's session belongs
-	 * to. `/mcp` passes the id its API key resolved to, because an MCP request
-	 * carries no session cookie.
+	 * to. `/mcp` passes the id its API key or OAuth access token resolved to,
+	 * because an MCP request carries no session cookie.
 	 */
 	userId?: string;
 	/**

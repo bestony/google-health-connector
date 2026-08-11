@@ -115,8 +115,8 @@ migrations are applied.
 | ---------------------- | --------------------------------------------------------- |
 | `DATABASE_URL`         | `libsql://<db>-<org>.turso.io` (from `turso db show --url`) |
 | `TURSO_AUTH_TOKEN`     | from `turso db tokens create`                              |
-| `BETTER_AUTH_SECRET`   | `openssl rand -base64 32` — rotating it makes every stored OAuth token undecryptable |
-| `BETTER_AUTH_URL`      | the deployed origin, e.g. `https://<project>.vercel.app`, no trailing slash |
+| `BETTER_AUTH_SECRET`   | `openssl rand -base64 32` — immutable per environment; rotation is a [full auth outage](#secret-rotation) |
+| `BETTER_AUTH_URL`      | the deployed bare origin and OAuth issuer, e.g. `https://<project>.vercel.app`, with no path or trailing slash |
 | `MCP_OAUTH_ENABLED`    | `true` only after the OAuth schema, discovery routes and MCP bearer verification are deployed |
 | `GOOGLE_CLIENT_ID`     | Google Cloud Console → Credentials                          |
 | `GOOGLE_CLIENT_SECRET` | Google Cloud Console → Credentials                          |
@@ -167,8 +167,9 @@ DATABASE_URL=libsql://… TURSO_AUTH_TOKEN=… pnpm db:baseline
   pin the function near it — `turso db show <db>` prints the primary's location, and
   `"regions": ["iad1"]` in `vercel.json` pins the function. Reads can be served locally by
   adding replicas (`turso db replicate <db> <location>`).
-- **Rotating `BETTER_AUTH_SECRET` invalidates stored Google tokens**, because
-  `encryptOAuthTokens` is keyed off it. Every user would have to re-authorize Google Health.
+- **Do not rotate `BETTER_AUTH_SECRET` as routine maintenance.** It now protects sessions,
+  Google tokens and MCP signing material. Follow [Secret rotation](#secret-rotation) when
+  compromise makes the outage necessary.
 
 The same steps work for PostgreSQL or MySQL: change `DATABASE_URL`, drop
 `TURSO_AUTH_TOKEN`, and the build applies that dialect's migrations instead. Connections
@@ -186,7 +187,7 @@ Authentication is handled by [better-auth](https://better-auth.com), persisted t
 | File                          | Role                                                                      |
 | ----------------------------- | ------------------------------------------------------------------------- |
 | `src/lib/auth.server.ts`      | better-auth instance (`getAuth()`), Drizzle adapter, providers — server only |
-| `src/lib/auth-client.ts`      | Browser client (`signIn`, `signUp`, `signOut`, `useSession`)               |
+| `src/lib/auth-client.ts`      | Browser client plus `oauthProviderClient` signed-query handoff             |
 | `src/lib/one-tap-client.ts`   | Google One Tap client, built once the client ID is known + FedCM sign-out  |
 | `src/lib/session.ts`          | `fetchSession` server function + `sessionQueryOptions()` cache entry       |
 | `src/lib/auth-providers.ts`   | Tells the browser which social providers are configured, and their client ID |
@@ -203,8 +204,12 @@ Authentication is handled by [better-auth](https://better-auth.com), persisted t
 | `src/lib/api-key-config.ts`   | Key prefix, rate limit and header name — pure data, shared by both sides    |
 | `src/lib/api-key.ts`          | Issue, read and revoke the signed-in user's one API key                    |
 | `src/components/api-key-card.tsx` | The API key card on `/dashboard`                                       |
+| `src/lib/oauth-consent.ts`    | Validates signed authorization queries and builds consent copy             |
+| `src/lib/oauth-grants.ts`     | Lists and revokes the signed-in user's OAuth application grants            |
+| `src/components/connected-apps-card.tsx` | Grant list and revoke controls on `/dashboard`                   |
+| `src/routes/consent.tsx`      | Per-application MCP consent page                                            |
 | `src/routes/api/auth/$.ts`    | Mounts every better-auth endpoint under `/api/auth/*`                      |
-| `src/db/schema/<dialect>-auth.ts` | Generated Drizzle tables: `user`, `session`, `account`, `verification`, `apikey` |
+| `src/db/schema/<dialect>-auth.ts` | Generated auth, rate-limit, JWK, OAuth client, grant and token tables  |
 | `src/db/client.server.ts`     | Lazy, dialect-aware Drizzle handle (`getDb()`)                             |
 
 Copy `.env.example` to `.env` and fill it in (`openssl rand -base64 32` for the secret),
@@ -236,6 +241,33 @@ JSON mode arguments, and mismatched MySQL foreign-key widths; the command's post
 normalizes them and restores the repository headers before it generates the next dialect.
 Then generate a migration per dialect (see [Database](#database)).
 
+The server plugin order is `apiKey`, then the `MCP_OAUTH_ENABLED`-controlled `jwt` and
+`oauthProvider`, then optional `oneTap`, with `tanstackStartCookies` last. The generated
+schema contains `user`, `session`, `account`, `verification`, `apikey`, `rateLimit`, `jwks`,
+`oauthClient`, `oauthConsent`, `oauthAccessToken` and `oauthRefreshToken`.
+
+### Secret rotation
+
+Changing `BETTER_AUTH_SECRET` is a planned authentication outage, not a transparent key
+roll. Existing browser sessions and signed OAuth continuations fail. Stored Google tokens
+and JWK private keys become undecryptable, so Google users must consent again and the
+authorization server cannot sign with its old keys. Every connected MCP client experiences
+an authentication break because access JWTs signed by the retired keys fail. Public client
+registrations, consents and hashed refresh-token rows are separate database state and are not
+deleted by this procedure; delete them too when the incident requires a complete client reset.
+
+Use this procedure only when the existing secret must be retired:
+
+1. Stop or drain every serving instance so old and new secrets are never live together.
+2. Install the new `BETTER_AUTH_SECRET` in every instance.
+3. Delete every row from `jwks`. This is the global signing-key kill switch; the next signing
+   operation creates a key encrypted with the new secret.
+4. Restart every serving instance before restoring traffic. The access-token verifier caches
+   JWKS responses for 300 seconds, so deleting the rows alone leaves a warm process able to
+   accept an old signing key for up to five minutes.
+5. Have users sign in and re-authorize Google Health. MCP clients must obtain an access token
+   under the new signing key, by refresh where still allowed or by authorization again.
+
 ### Google sign-in
 
 1. In [Google Cloud Console](https://console.cloud.google.com/apis/credentials), create an
@@ -260,7 +292,8 @@ Two choices worth knowing about, both in `src/lib/auth.server.ts`:
   the user actually passes the consent screen — on the first grant, and whenever the
   requested scopes change. Use `prompt: "select_account consent"` if a refresh token must be
   guaranteed on *every* sign-in. Tokens are stored encrypted (`encryptOAuthTokens`), keyed off
-  `BETTER_AUTH_SECRET`; rotating that secret forces every user to consent again.
+  `BETTER_AUTH_SECRET`; [Secret rotation](#secret-rotation) describes the other auth state it
+  invalidates and the required outage procedure.
 - Account linking trusts Google's `email_verified` claim, but better-auth also requires the
   *existing local* account to be verified before it merges the two. This app has no email
   verification flow, so signing in with Google using an address that already has a password
@@ -463,7 +496,7 @@ project cannot be verified without them.
 Changing the operator, the contact address or the effective date is one edit in
 `src/lib/legal.ts`; both documents read from it, so they cannot disagree.
 
-Five properties are requirements rather than preferences, and breaking any of them is
+Six properties are requirements rather than preferences, and breaking any of them is
 enough for Google to reject the submission:
 
 - **Both routes are public.** Neither has a `beforeLoad` guard — a reviewer opens the URLs
@@ -475,6 +508,9 @@ enough for Google to reject the submission:
 - **The consent screen carries a prominent in-product disclosure.** It sits above the
   authorize button in `src/components/google-health-authorization.tsx`, because Google
   wants it shown *before* the consent request, not only in a linked policy.
+- **MCP application consent is mandatory and per application.** `/consent` names the
+  self-registered application, shows its registered redirect URI and requested scopes, and
+  has no trusted-client or `skipConsent` path.
 - **The disclosed data types match the requested scopes.** The privacy policy's table is
   generated from `GOOGLE_HEALTH_DATA_TYPES`, so adding a scope to the catalog discloses it
   automatically — do not hand-write that list.
@@ -485,7 +521,8 @@ unknown id throws, but a stale number just points the reader at the wrong clause
 
 ### API keys
 
-An API key is what an MCP client authenticates with. Keys come from
+An API key is the manual owner-credential option for an MCP client that does not complete
+OAuth. Keys come from
 [`@better-auth/api-key`](https://better-auth.com/docs/plugins/api-key), which stores them
 hashed — the plaintext exists exactly once, in the reply to the call that created it, which
 is why the dashboard shows it once and says so.
@@ -551,22 +588,25 @@ granted, and the dashboard URL to change it.
 | ------------------------------ | ----------------------------------------------------------------- |
 | `src/lib/mcp/health.ts`        | Domain logic — clamping, summarising, the catalog. No MCP or HTTP types |
 | `src/lib/mcp/server.ts`        | `createMcpServer(identity)` — which tools and resources are exposed, and who may invoke them |
+| `src/lib/mcp/oauth-scopes.ts`  | Canonical issuer, resource, audiences and scope sets — pure data      |
+| `src/lib/mcp/oauth-metadata.ts` | Public discovery response and CORS policy                             |
 | `src/lib/mcp/credential.ts`    | Pure API-key/JWT classification, scope checks and OAuth challenge construction |
 | `src/lib/mcp/auth.server.ts`   | Verifies API keys or JWT access tokens and checks OAuth grant liveness |
 | `src/lib/mcp/handler.server.ts` | `Request` → `Response` bridge: transport, logging, teardown        |
-| `src/lib/mcp/endpoint.ts`      | The endpoint's absolute URL, for the dashboard's copy-paste snippet |
+| `src/lib/mcp/endpoint.ts`      | Server-derived OAuth and API-key connection commands for the dashboard |
 | `src/routes/mcp.ts`            | The route itself                                                   |
 
 ### Who may do what
 
 Every request to `/mcp` must authenticate, including `initialize` and `tools/list`.
-Anonymous discovery is not available; the RFC 9728 challenge is how a client discovers the
-authorization server before it has a credential.
+Credential-less MCP methods never execute: the `401` challenge is how a client discovers
+the authorization server before it has a credential. The discovery documents themselves
+remain public.
 
 | Credential state | HTTP result |
 | ---------------- | ----------- |
 | No credential | `401` with the protected-resource metadata URL |
-| Valid API key | request proceeds |
+| Valid API key | request proceeds as the key owner |
 | Valid JWT OAuth access token with `mcp:health:read` | request proceeds |
 | Bad, expired or opaque credential | `401`, `error="invalid_token"` |
 | Valid OAuth token without `mcp:health:read` | `403`, `error="insufficient_scope"` |
@@ -576,40 +616,91 @@ credential before calling either verifier. The `ghc_` prefix wins over token sha
 three-segment compact JWS is OAuth, and every other bearer value is rejected. A non-Bearer
 authorization scheme is also rejected instead of being silently treated as anonymous.
 
-That `401` has a sequel. A client that gets one follows RFC 9728 and probes
-`/.well-known/oauth-protected-resource` with `Accept: application/json`. With
-`MCP_OAUTH_ENABLED=true`, explicit server routes publish the protected-resource,
-authorization-server and OpenID metadata; with the switch off, the same routes fail closed
-with `404`. `src/lib/html-only-refusal.server.ts` remains the fallback for a misspelled
-discovery URL or another unmatched non-HTML path: it converts TanStack Start's HTML-only
-`500` refusal into an honest `404` without touching a real JSON API response.
+### OAuth discovery and consent
 
-The OAuth issuer must be an HTTPS origin in production. Plain HTTP is supported for
-`localhost`, `127.0.0.0/8` and `::1` development only; a LAN URL such as
-`http://192.168.1.10:3000` can produce a metadata issuer whose scheme does not match the JWT
-`iss` claim and is not a supported test deployment.
+That `401` starts the OAuth flow. With `MCP_OAUTH_ENABLED=true`, four root routes publish the
+public discovery chain. With the switch off, all four fail closed with `404`.
 
-The token endpoint issues a JWT access token only when the request includes
-`resource=<origin>/mcp`. Without that parameter it issues an opaque token, which this resource
-server cannot verify locally. The resulting `401` names the missing resource parameter rather
-than reporting only a generic invalid token.
+| URL | What it returns |
+| --- | --- |
+| `/.well-known/oauth-protected-resource` | RFC 9728 metadata for `<origin>/mcp`, including the authorization server and advertised scopes |
+| `/.well-known/oauth-protected-resource/mcp` | The same byte-stable protected-resource document at the path named by the challenge |
+| `/.well-known/oauth-authorization-server` | RFC 8414 issuer plus the mounted authorize, token, registration, revocation and JWKS endpoints |
+| `/.well-known/openid-configuration` | OpenID Connect metadata for clients that start with OIDC discovery |
 
-JWT signature verification is local against `/api/auth/jwks`, followed by one database read
-that confirms the `(user, client)` consent grant still exists and still covers
-`mcp:health:read`. Signing out does not revoke an OAuth grant or cap it at the seven-day browser
-session lifetime. Deleting the consent grant makes the `/mcp` liveness check fail immediately.
-A complete client revoke must also delete its refresh and opaque access-token rows so it cannot
-mint a replacement. Deleting the `jwks` rows is the global signing-key kill switch, but warm
-processes cache the fetched JWKS for up to five minutes; restart all serving instances as part
-of an emergency rotation when invalidation must be immediate.
+These are explicit server routes. `src/lib/html-only-refusal.server.ts` still handles a
+misspelled discovery URL or another unmatched non-HTML path. It converts TanStack Start's
+HTML-only `500` refusal into an honest `404` without changing a real JSON response.
+
+**The issuer is the bare origin on purpose.** better-auth's `withPath()` adds its default
+`/api/auth` base path to `BETTER_AUTH_URL`. If that derived value became the JWT issuer,
+clients would validate `iss` as `<origin>/api/auth` and derive path-inserted RFC 8414 URLs
+instead of the root discovery chain above. The `jwt` plugin therefore pins `issuer` to
+`new URL(BETTER_AUTH_URL).origin`. Metadata and JWTs identify `<origin>`, while the actual
+authorization endpoints remain under `<origin>/api/auth/oauth2/*`.
+
+**`resource` decides the token format.** The token endpoint emits a JWT access token only
+when the request includes `resource=<origin>/mcp`. Without it, the provider emits an opaque
+token. `/mcp` verifies JWTs locally, so it rejects the opaque value with an error that names
+the missing token-endpoint parameter. `validAudiences` explicitly includes `<origin>/mcp`
+and `<origin>` instead of the provider default, `<origin>/api/auth`. The protected-resource
+document advertises `<origin>/mcp`, and the resource server requires that exact audience.
+
+**One coarse scope is deliberate.** `mcp:health:read` permits the MCP tools to read the
+Google Health categories this user has already granted to this Service. It does not expand
+the Google grant. There is no reliable public mapping from each Google data type to one
+consent category, so per-category MCP scopes would promise enforcement the server cannot
+perform correctly. A missing coarse scope still fails at the HTTP boundary with `403`.
+
+**Stored provider tokens are hashes.** `storeTokens: "hashed"` is written explicitly even
+though it is the plugin default. SHA-256 base64url digests are 43 characters. MySQL generates
+`varchar(255)` for the unique access-token and refresh-token columns, while raw tokens can
+exceed that width. Keeping hashes avoids a MySQL-only truncation failure and means stored
+opaque and refresh token values are not reusable plaintext credentials.
+
+**Unauthenticated registration still creates a public client.** Dynamic registration forces
+`token_endpoint_auth_method: "none"`, so it mints no client secret. It rejects the
+`client_credentials` grant, requires PKCE S256, and rejects unsafe redirect schemes such as
+`javascript:`, `data:` and `vbscript:`. Registration does not grant data access. Every client
+must still reach `/consent`; no client is trusted and `skipConsent` is never set.
+
+**The authorization query is signed across the login handoff.** The provider adds a `sig`
+HMAC to its authorization query. The browser plugin attaches the unchanged signed fields as
+`oauth_query` to non-GET auth requests, so login and consent resume the request the server
+issued instead of accepting browser-authored scopes or redirects. Consequently, `sig` is a
+reserved query parameter across this application. Routes must preserve it and must not reuse
+it for another feature.
+
+The provider has no `signUp.page`, `selectAccount.page` or `postLogin` configuration.
+Therefore `prompt=select_account` fails with `unsupported_prompt_select_account`, while
+`prompt=create` falls back to `/login`. The provider's `validateIssuerUrl` also rewrites
+`http:` to `https:` for non-loopback hosts. Plain HTTP works for `localhost`,
+`127.0.0.0/8` and `::1`, but a LAN test URL such as `http://192.168.1.10:3000` produces an
+issuer mismatch and is not a supported test deployment.
+
+JWT signature verification uses `/api/auth/jwks`, then one database read confirms that the
+`(user, client)` consent still exists and still covers `mcp:health:read`. Signing out does
+not revoke the grant or cap it at the seven-day browser session lifetime. Connected apps
+deletes the consent first, so the next `/mcp` request with an old JWT fails the liveness
+check. It also deletes that user's stored access and refresh token rows for the client, so
+the client cannot use them to mint a replacement. Deleting `jwks` rows is the global signing
+key kill switch, subject to the 300-second verifier cache described in
+[Secret rotation](#secret-rotation).
 
 The tool handlers repeat the OAuth scope check as a belt-and-braces boundary. That in-band
 `isError: true` refusal is normally unreachable because the HTTP handler has already returned
 `403`, but it keeps a directly constructed MCP server from reaching Google without the scope.
 
-The key travels in `Authorization: Bearer <key>` — the header MCP clients can set without
-extra configuration — or in `x-api-key`, which is better-auth's own default and what a
-`curl` example reaches for. See [API keys](#api-keys) for where keys come from.
+An OAuth-capable client needs no configured header. Its first credential-less request gets
+the `401` challenge, completes discovery and opens the browser for login and consent:
+
+```sh
+claude mcp add --transport http ghealth http://localhost:3000/mcp
+```
+
+The API-key counterpart is manual. The key travels in `Authorization: Bearer <key>` — the
+header MCP clients can set — or in `x-api-key`, which is better-auth's plugin default. See
+[API keys](#api-keys) for where keys come from.
 
 ```sh
 claude mcp add --transport http ghealth http://localhost:3000/mcp \
@@ -620,13 +711,33 @@ The identity a client sees during `initialize` — `title` and `websiteUrl` — 
 `LEGAL` in `src/lib/legal.ts`, so renaming the product reaches the MCP client list too
 rather than leaving a stale name behind.
 
-Exercise it by hand. The Streamable HTTP spec requires the client to accept **both**
-content types, so an `Accept: application/json` alone is answered with `406`. Drop the
-`Authorization` header and the same call is rejected with `401` before the transport runs:
+Exercise the boundary by hand. The first call has no header: it is the start of the OAuth
+path, and its `WWW-Authenticate` response points to protected-resource metadata. `curl` does
+not open a browser or finish OAuth itself, so inspect the two discovery documents next:
+
+```sh
+curl -si http://localhost:3000/mcp \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"curl","version":"1"}}}'
+
+curl -s http://localhost:3000/.well-known/oauth-protected-resource/mcp
+curl -s http://localhost:3000/.well-known/oauth-authorization-server
+```
+
+After an OAuth client obtains a JWT with `resource=http://localhost:3000/mcp`, its call and
+the API-key call differ only by the credential. The Streamable HTTP spec requires **both**
+response content types; `Accept: application/json` alone gets `406`.
 
 ```sh
 curl -s http://localhost:3000/mcp \
-  -H "Authorization: Bearer $GHEALTH_API_KEY" \
+  -H "Authorization: Bearer $GHEALTH_OAUTH_ACCESS_TOKEN" \
+  -H 'Content-Type: application/json' \
+  -H 'Accept: application/json, text/event-stream' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_health_data","arguments":{"dataType":"steps"}}}'
+
+curl -s http://localhost:3000/mcp \
+  -H "x-api-key: $GHEALTH_API_KEY" \
   -H 'Content-Type: application/json' \
   -H 'Accept: application/json, text/event-stream' \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"read_health_data","arguments":{"dataType":"steps"}}}'

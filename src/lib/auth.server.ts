@@ -186,9 +186,10 @@ function createAuth() {
 		},
 
 		plugins: [
-			// API keys, which are what an MCP client authenticates with. Keys are
-			// stored hashed, so the plaintext exists exactly once — in the response
-			// to the call that created it — and the dashboard says so.
+			// API keys are the manual owner-credential path for MCP clients that do
+			// not complete OAuth. Keys are stored hashed, so the plaintext exists
+			// exactly once — in the response to the call that created it — and the
+			// dashboard says so.
 			//
 			// `enableSessionForAPIKeys` is left off (its default): with it on, any
 			// request carrying `x-api-key` would be handed a full mocked session,

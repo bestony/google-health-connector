@@ -5,9 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## What this is
 
 A TanStack Start (React 19 + Vite + Nitro) app that turns a user's Google Health
-account into an MCP endpoint: sign in with Google, grant health scopes, get an API
-key, point any MCP client at `POST /mcp`. Health data is read live from Google — no
-copy is stored server-side.
+account into an MCP endpoint: sign in, grant health scopes, then approve an OAuth
+application or issue an API key for `POST /mcp`. Health data is read live from
+Google — no copy is stored server-side.
 
 `README.md` is unusually detailed and is the source of truth for behaviour and
 rationale; the sections on Database, Authentication, Google Health authorization,
@@ -140,6 +140,17 @@ dialect.
 `better-auth` and `@better-auth/oauth-provider` are an exact-version pair; pin
 both and upgrade them together so their peer graph cannot drift.
 
+The plugin order is `apiKey`, then the kill-switch-controlled `jwt` and
+`oauthProvider`, then optional `oneTap`, with `tanstackStartCookies` always last.
+The browser client also installs `oauthProviderClient` so signed authorization
+requests survive `/login` and `/consent`. The JWT issuer is pinned to the bare
+`BETTER_AUTH_URL` origin: better-auth's default `withPath()` adds `/api/auth`, which
+would move RFC 8414 discovery away from the root URL that MCP clients derive.
+
+The generated auth schemas contain `user`, `session`, `account`, `verification`,
+`apikey`, `rateLimit`, `jwks`, `oauthClient`, `oauthConsent`, `oauthAccessToken` and
+`oauthRefreshToken`. Regenerate every dialect after a plugin schema change.
+
 ### Google Health: four layers, each with a reason
 
 ```
@@ -173,9 +184,14 @@ makes the route correct on serverless).
 ```
 src/lib/mcp/health.ts         domain logic — clamping, summarising, the catalog. No MCP/HTTP types
 src/lib/mcp/server.ts         createMcpServer(identity): which tools exist, who may invoke them
+src/lib/mcp/oauth-scopes.ts   canonical issuer, resource, audiences and scope sets — pure data
+src/lib/mcp/oauth-metadata.ts public discovery response policy — pure response construction
 src/lib/mcp/credential.ts     pure credential classification, scope and challenge decisions
 src/lib/mcp/auth.server.ts    API-key/JWT verification and OAuth consent-grant liveness
 src/lib/mcp/handler.server.ts Request -> Response bridge: transport, logging, teardown
+src/lib/mcp/endpoint.ts       server-derived OAuth and API-key connection commands
+src/lib/oauth-consent.ts      signed authorization-query parsing and consent copy — pure
+src/lib/oauth-grants.ts       session-bound grant listing and revocation orchestration
 src/routes/mcp.ts             the route
 ```
 
@@ -183,11 +199,12 @@ Adding a tool: write it as a plain function in `health.ts` (or a sibling), then
 register it in `createMcpServer()`. Keeping logic out of the registration is what
 lets it be tested without a transport.
 
-Every `/mcp` request authenticates, including `initialize` and `tools/list`: no
-credential or a bad/opaque credential → `401`; a valid OAuth token without
-`mcp:health:read` → `403`; a valid API key or scoped OAuth token proceeds. Never
-demote a malformed `Authorization` header to anonymous. OAuth JWT verification
-is local, then one indexed consent read keeps explicit revocation immediate;
+Every `/mcp` request authenticates, including `initialize` and `tools/list`. No
+credential gets a `401` OAuth challenge; a bad or opaque credential gets a `401`;
+a valid OAuth token without `mcp:health:read` gets a `403`. A valid API key is an
+owner credential, while an OAuth identity carries only its granted scopes. Never
+demote a malformed `Authorization` header to anonymous. OAuth JWT verification is
+local, then one indexed consent read keeps explicit revocation immediate;
 browser-session expiry does not revoke the grant. Tool handlers repeat the scope
 check in-band so a directly constructed server still cannot reach Google without
 permission.
@@ -201,7 +218,10 @@ keep the Limited Use disclosure close to verbatim, keep the in-product disclosur
 above the authorize button, and keep the disclosed data types generated from
 `GOOGLE_HEALTH_DATA_TYPES`. Operator, contact and dates live once in
 `src/lib/legal.ts`; `LEGAL` also supplies the MCP server's advertised identity.
-Cross-references use `<Ref id="…" />` — never write a section number by hand.
+`/consent` is also part of this compliance surface: it must name the application
+and redirect URI, derive health categories from the catalog, preserve the Limited
+Use disclosure, and never bypass per-application consent. Cross-references use
+`<Ref id="…" />` — never write a section number by hand.
 
 ## Conventions
 
@@ -212,8 +232,11 @@ Cross-references use `<Ref id="…" />` — never write a section number by hand
   useful scopes when debugging: `google-health:api`, `mcp:handler`, `mcp:server`, `db`.
   In the browser: `localStorage.setItem('app:logLevel', 'debug')`.
 - Connection strings go through `redactConnectionString()` before reaching a log line.
-- Rotating `BETTER_AUTH_SECRET` makes every stored Google OAuth token undecryptable —
-  every user has to re-consent. Treat it as immutable per environment.
+- Rotating `BETTER_AUTH_SECRET` invalidates sessions and signed OAuth continuations,
+  makes Google tokens and stored JWK private keys undecryptable, and breaks MCP
+  client authorization. Treat it as immutable. A forced rotation requires deleting
+  `jwks` rows and restarting every serving process to clear the 300-second verifier
+  cache; follow the complete outage procedure in README.md.
 - `AGENTS.md` is a generated index of TanStack "intent" guidance packs. When working
   on unfamiliar TanStack Router/Start surface, load the matching pack with the
   `pnpm dlx @tanstack/intent@latest load …` command listed there.

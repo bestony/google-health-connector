@@ -103,9 +103,9 @@ function describeApiError(
 	grantedScopes: readonly string[],
 ): string {
 	// The likeliest failure of all, and it happens before Google is even called:
-	// the user has an account and an API key but never authorized Google Health,
-	// or revoked it since. On its own the message says what is wrong and not
-	// where to fix it.
+	// the user has a valid MCP credential but never authorized Google Health, or
+	// revoked it since. On its own the message says what is wrong and not where
+	// to fix it.
 	if (error instanceof GoogleHealthAuthorizationError) {
 		return `${error.message} Do that at ${dashboardUrl()}.`;
 	}
