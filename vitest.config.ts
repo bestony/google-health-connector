@@ -15,8 +15,9 @@ export default defineConfig({
 			reporter: ["text", "text-summary", "json", "html"],
 			include: ["src/lib/**/*.ts", "src/db/dialect.ts"],
 			// Generated Google schema code and server adapters are validated by
-			// integration/build checks. The unit-test gate covers hand-written,
-			// deterministic domain and transport-boundary helpers.
+			// integration/build checks. Session-bound OAuth grant orchestration follows
+			// api-key.ts: its adapter effects stay here while its deterministic sorting
+			// and copy mapping remain in a covered pure module.
 			exclude: [
 				"src/lib/**/*.gen.ts",
 				"src/lib/auth.server.ts",
@@ -24,6 +25,7 @@ export default defineConfig({
 				"src/lib/google-health-api.server.ts",
 				"src/lib/google-health-token.server.ts",
 				"src/lib/api-key.ts",
+				"src/lib/oauth-grants.ts",
 				"src/lib/google-health-access.ts",
 				"src/lib/auth-providers.ts",
 				"src/lib/session.ts",
