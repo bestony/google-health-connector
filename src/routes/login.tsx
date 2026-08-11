@@ -47,6 +47,8 @@ interface LoginSearch {
 	redirect?: string;
 	error?: string;
 	error_description?: string;
+	/** A signed authorization request must remain on this page after sign-in. */
+	oauth?: true;
 }
 
 function validateLoginSearch(search: Record<string, unknown>): LoginSearch {
@@ -61,13 +63,26 @@ function validateLoginSearch(search: Record<string, unknown>): LoginSearch {
 	const description = sanitizeOAuthErrorParam(search.error_description);
 	if (description !== undefined) result.error_description = description;
 
+	if (typeof search.sig === "string" && search.sig.length > 0) {
+		result.oauth = true;
+	}
+
 	return result;
+}
+
+/** Whether better-auth has already started a full-page OAuth redirect. */
+function isAuthRedirectResponse(
+	value: unknown,
+): value is { redirect: true; url: string } {
+	if (typeof value !== "object" || value === null) return false;
+	const candidate = value as { redirect?: unknown; url?: unknown };
+	return candidate.redirect === true && typeof candidate.url === "string";
 }
 
 export const Route = createFileRoute("/login")({
 	validateSearch: validateLoginSearch,
 	beforeLoad: ({ context, search }) => {
-		if (context.session) {
+		if (context.session && search.oauth !== true) {
 			throw redirect({ to: search.redirect ?? "/dashboard" });
 		}
 	},
@@ -123,7 +138,12 @@ function LoginPage() {
 	 * before may have left per-user answers behind, and this navigation is the
 	 * moment they would be read back as the new user's.
 	 */
-	async function completeSignIn() {
+	async function completeSignIn(response: unknown) {
+		// The default better-auth redirect plugin has already assigned
+		// `window.location.href`; any router navigation here could win the race and
+		// discard the signed authorization continuation.
+		if (isAuthRedirectResponse(response)) return;
+
 		queryClient.clear();
 		await router.invalidate();
 		await router.navigate({ to: search.redirect ?? "/dashboard" });
@@ -146,7 +166,7 @@ function LoginPage() {
 			return;
 		}
 
-		await completeSignIn();
+		await completeSignIn(result.data);
 	}
 
 	async function onGoogleSignIn() {

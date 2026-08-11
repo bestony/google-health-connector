@@ -29,8 +29,8 @@ interface GoogleOneTapProps {
 	clientId: string;
 	/** The user picked an account; the ID token is on its way to the server. */
 	onStart?: () => void;
-	/** The session cookie has been issued. Navigate from here. */
-	onSuccess: () => void | Promise<void>;
+	/** The session cookie has been issued. Continue unless OAuth is redirecting. */
+	onSuccess: (response: unknown) => void | Promise<void>;
 	/** The server rejected the ID token. Receives ready-to-display copy. */
 	onError: (message: string) => void;
 }
@@ -122,9 +122,9 @@ export function GoogleOneTap({
 						log.debug("exchanging id token for a session");
 						if (mounted.current) handlers.current.onStart?.();
 					},
-					onSuccess: () => {
+					onSuccess: ({ data }) => {
 						log.info("sign-in succeeded");
-						if (mounted.current) void handlers.current.onSuccess();
+						if (mounted.current) void handlers.current.onSuccess(data);
 					},
 					onError: ({ error }) => {
 						log.error("callback rejected", {
