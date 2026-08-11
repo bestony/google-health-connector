@@ -103,7 +103,9 @@ describe("MCP credential decisions", () => {
 			reason: "unsupported-authorization-scheme",
 		});
 		expect(
-			extractMcpCredential(request({ authorization: "Bearer opaque-token" })),
+			extractMcpCredential(
+				request({ authorization: "Bearer opaque-access-token" }),
+			),
 		).toEqual({
 			outcome: "rejected",
 			kind: "unknown",
@@ -112,7 +114,14 @@ describe("MCP credential decisions", () => {
 		expect(extractMcpCredential(request({ authorization: "Bearer" }))).toEqual({
 			outcome: "rejected",
 			kind: "unknown",
-			reason: "opaque-bearer",
+			reason: "malformed-bearer",
+		});
+		expect(
+			extractMcpCredential(request({ authorization: "Bearer garbage" })),
+		).toEqual({
+			outcome: "rejected",
+			kind: "unknown",
+			reason: "malformed-bearer",
 		});
 	});
 
@@ -131,6 +140,20 @@ describe("MCP credential decisions", () => {
 			message:
 				"This server accepts only JWT access tokens. Request one from the " +
 				"token endpoint with resource=https://health.example/mcp.",
+		});
+		expect(
+			describeCredentialRejection(
+				{
+					outcome: "rejected",
+					kind: "unknown",
+					reason: "malformed-bearer",
+				},
+				"https://health.example",
+			),
+		).toEqual({
+			code: "MALFORMED_BEARER_TOKEN",
+			message:
+				"Authorization: Bearer must include an API key or a JWT access token.",
 		});
 		expect(
 			describeCredentialRejection(

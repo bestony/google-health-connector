@@ -1,6 +1,7 @@
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
 import { getContext } from "./integrations/tanstack-query/root-provider";
+import { parseAppSearch, stringifyAppSearch } from "./lib/router-search";
 import { routeTree } from "./routeTree.gen";
 
 export function getRouter() {
@@ -9,6 +10,8 @@ export function getRouter() {
 	const router = createTanStackRouter({
 		routeTree,
 		context,
+		parseSearch: parseAppSearch,
+		stringifySearch: stringifyAppSearch,
 		scrollRestoration: true,
 		defaultPreload: "intent",
 		defaultPreloadStaleTime: 0,

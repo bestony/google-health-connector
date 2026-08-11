@@ -2,6 +2,7 @@ import {
 	createFileRoute,
 	Link,
 	redirect,
+	stripSearchParams,
 	useRouter,
 } from "@tanstack/react-router";
 import { useState } from "react";
@@ -81,6 +82,12 @@ function isAuthRedirectResponse(
 
 export const Route = createFileRoute("/login")({
 	validateSearch: validateLoginSearch,
+	search: {
+		// `oauth` is derived routing state, not part of the authorization query.
+		// Keep it available to `beforeLoad` without serializing `oauth=true` into
+		// the signed URL and triggering a canonical redirect on first load.
+		middlewares: [stripSearchParams({ oauth: true })],
+	},
 	beforeLoad: ({ context, search }) => {
 		if (context.session && search.oauth !== true) {
 			throw redirect({ to: search.redirect ?? "/dashboard" });

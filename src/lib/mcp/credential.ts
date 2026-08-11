@@ -32,6 +32,7 @@ export type McpCredentialExtraction =
 			outcome: "rejected";
 			kind: "oauth" | "unknown";
 			reason:
+				| "malformed-bearer"
 				| "opaque-bearer"
 				| "oauth-in-api-key-header"
 				| "unsupported-authorization-scheme";
@@ -49,6 +50,7 @@ export interface McpCredentialRejection {
 
 const COMPACT_JWS = /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 const BEARER_AUTHORIZATION = /^\s*Bearer(?:\s+(.+?))?\s*$/i;
+const PLAUSIBLE_OPAQUE_BEARER = /^[A-Za-z0-9._~+/=-]{16,}$/;
 
 /** Classify only shapes this resource server knows how to verify. */
 export function classifyBearerCredential(
@@ -85,7 +87,9 @@ export function extractMcpCredential(
 			return {
 				outcome: "rejected",
 				kind,
-				reason: "opaque-bearer",
+				reason: PLAUSIBLE_OPAQUE_BEARER.test(value)
+					? "opaque-bearer"
+					: "malformed-bearer",
 			};
 		}
 		return { outcome: "credential", credential: { kind, value } };
@@ -112,6 +116,12 @@ export function describeCredentialRejection(
 	baseUrl: string,
 ): McpCredentialRejection {
 	switch (extraction.reason) {
+		case "malformed-bearer":
+			return {
+				code: "MALFORMED_BEARER_TOKEN",
+				message:
+					"Authorization: Bearer must include an API key or a JWT access token.",
+			};
 		case "opaque-bearer":
 			return {
 				code: "OPAQUE_TOKEN",
