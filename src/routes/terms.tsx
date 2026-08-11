@@ -91,7 +91,7 @@ const SECTIONS: readonly LegalSection[] = [
 					</li>
 					<li>
 						optionally expose your own data to a Model Context Protocol (MCP)
-						client that you run and control.
+						application that you choose and approve.
 					</li>
 				</Bullets>
 				<Para>
@@ -233,27 +233,35 @@ const SECTIONS: readonly LegalSection[] = [
 		body: (
 			<>
 				<Para>
-					MCP access is an optional feature. It is disabled until you enable it
-					and issue credentials, and it exposes only your own account's data.
+					MCP access is an optional feature. It requires either an API key you
+					generate or an OAuth application you approve. An API key can access
+					your account's MCP data. An OAuth application can access only your
+					account and the scopes in its approval.
 				</Para>
 				<Bullets>
 					<li>
-						<strong>You choose the client.</strong> When you connect one, your
+						<strong>You choose the application.</strong> You are responsible for
+						the applications you approve, and approving an application is your
+						instruction to disclose your health data to it within the displayed
+						scopes until you revoke that approval. When you connect one, your
 						health data is sent to it at your direction. If it forwards your
 						data to a model provider or anywhere else, that is a consequence of
 						the client you chose, and its terms govern what happens next.
 					</li>
 					<li>
-						<strong>You are responsible for your credentials.</strong> Treat
-						them like a password. Anyone holding them can read your health data.
-						Do not commit them to a repository, paste them into a shared
-						document, or give them to anyone you would not hand your health
+						<strong>You are responsible for your API keys.</strong> Treat an API
+						key like a password. Anyone holding it can read your MCP health
+						data. Do not commit it to a repository, paste it into a shared
+						document, or give it to anyone you would not hand your health
 						records to.
 					</li>
 					<li>
-						<strong>Transfers cannot be undone.</strong> Revoking credentials
-						stops future access immediately, but data a client already received
-						is beyond our reach.
+						<strong>Transfers cannot be undone.</strong> Revoking an API key
+						stops future access for that key. Revoking an application's approval
+						deletes the approval and its stored access and refresh tokens; the
+						MCP endpoint rejects its old access token on the next request. These
+						controls are independent and do not revoke each other. Data a client
+						already received is beyond our reach.
 					</li>
 					<li>
 						<strong>We may protect the endpoint.</strong> We can rate-limit,

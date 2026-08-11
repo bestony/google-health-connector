@@ -65,7 +65,7 @@ export const LEGAL = {
 	/** When the current text takes effect. */
 	effectiveDate: "August 10, 2026",
 	/** When the current text was last changed. */
-	lastUpdated: "August 10, 2026",
+	lastUpdated: "August 11, 2026",
 	/** Rendered in the site footer; a constant keeps SSR and hydration in step. */
 	copyrightYear: 2026,
 } as const;

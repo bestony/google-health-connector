@@ -120,8 +120,9 @@ const SECTIONS: readonly LegalSection[] = [
 						the data goes where you point it.
 					</li>
 					<li>
-						You can revoke our access at Google, delete the copies we hold, or
-						delete your account entirely, at any time, without giving a reason.
+						You can revoke our access at Google, revoke an API key or an
+						application's approval, delete the copies we hold, or delete your
+						account entirely, at any time, without giving a reason.
 					</li>
 					<li>
 						We do not use your health data to train machine learning models.
@@ -218,7 +219,16 @@ const SECTIONS: readonly LegalSection[] = [
 					and for nothing else.
 				</Para>
 
-				<Subheading>d. Session and technical data</Subheading>
+				<Subheading>d. MCP application registrations and approvals</Subheading>
+				<Para>
+					An OAuth application can register its name, application URI and
+					redirect URIs with the Service. When you approve an application, we
+					store which application you approved, the scopes you granted, and when
+					you approved or updated them. Connected apps on your dashboard shows
+					these records back to you.
+				</Para>
+
+				<Subheading>e. Session and technical data</Subheading>
 				<Para>
 					We set a session cookie so you stay signed in. It is strictly
 					necessary for the Service to work — it is not an advertising or
@@ -228,7 +238,7 @@ const SECTIONS: readonly LegalSection[] = [
 					fails.
 				</Para>
 
-				<Subheading>e. Billing information</Subheading>
+				<Subheading>f. Billing information</Subheading>
 				<Para>
 					If you subscribe to a paid plan, {LEGAL.paymentProcessor} collects
 					your payment details and takes the payment. Your card number is
@@ -244,7 +254,7 @@ const SECTIONS: readonly LegalSection[] = [
 					address and an amount — and nothing about what is in your account.
 				</Para>
 
-				<Subheading>f. What we do not collect</Subheading>
+				<Subheading>g. What we do not collect</Subheading>
 				<Para>
 					We do not use third-party analytics, advertising SDKs, tracking pixels
 					or fingerprinting. We do not buy data about you from data brokers, and
@@ -277,6 +287,12 @@ const SECTIONS: readonly LegalSection[] = [
 					<li>
 						<strong>Authorization credentials</strong> — to call Google's APIs
 						on your behalf and to refresh access when a token expires.
+					</li>
+					<li>
+						<strong>MCP application and approval records</strong> — to identify
+						the application asking for access, enforce only the scopes you
+						granted, show your approvals, and let you revoke one application
+						without revoking another.
 					</li>
 					<li>
 						<strong>Session and technical data</strong> — to operate the Service
@@ -320,6 +336,11 @@ const SECTIONS: readonly LegalSection[] = [
 					categories, using the methods in <Ref id="your-choices" />. Withdrawal
 					stops future processing; it does not make processing that already
 					happened unlawful.
+				</Para>
+				<Para>
+					Approving an MCP application is a separate, user-initiated consent.
+					The approval page names the recipient, shows its registered redirect
+					URI, and lists the requested scopes before any data can be disclosed.
 				</Para>
 			</>
 		),
@@ -380,6 +401,20 @@ const SECTIONS: readonly LegalSection[] = [
 						about you.
 					</li>
 				</Bullets>
+				<Callout tone="warning">
+					<Para>
+						For MCP transfers, the Service implements explicit consent as a
+						user-initiated, per-application and informed decision. The approval
+						page names the recipient and its registered redirect URI. There are
+						no trusted applications and no path that skips consent.
+					</Para>
+					<Para>
+						This design is intended to fit the Limited Use exception for
+						transfers made with your explicit consent. The project owner must
+						review this position before submitting the Service for Google
+						verification.
+					</Para>
+				</Callout>
 			</>
 		),
 	},
@@ -400,14 +435,16 @@ const SECTIONS: readonly LegalSection[] = [
 				</Para>
 				<Bullets>
 					<li>
-						<strong>It is off until you turn it on.</strong> Nothing of yours is
-						reachable over MCP until you generate an API key on your dashboard.
-						Generating that key is the act that turns it on, and revoking it is
-						the act that turns it off again.
+						<strong>It is off until you turn it on.</strong> Data access
+						requires either an API key you generate or an OAuth application you
+						approve. An API key is an owner credential. An application receives
+						only the scopes in its own approval. Without either credential, no
+						health data is reachable over MCP.
 					</li>
 					<li>
-						<strong>It is scoped to you.</strong> Credentials you issue reach
-						only your own account's data. They never reach another user's.
+						<strong>It is scoped to you.</strong> An API key and an OAuth access
+						token resolve to only your account. An OAuth token is also limited
+						to the scopes you approved. Neither reaches another user's data.
 					</li>
 					<li>
 						<strong>You choose the destination.</strong> When you connect a
@@ -423,10 +460,14 @@ const SECTIONS: readonly LegalSection[] = [
 						a client.
 					</li>
 					<li>
-						<strong>You can revoke it.</strong> Revoking MCP credentials stops
-						all future access immediately. It cannot recall data that a client
-						has already received — no one can, which is why the choice of client
-						matters.
+						<strong>You can revoke it.</strong> Revoking the API key stops that
+						key. Revoking an application under Connected apps deletes its
+						approval and its stored access and refresh tokens. The MCP endpoint
+						checks the approval on every OAuth request, so an access token that
+						worked before revocation is rejected on its next request. Each
+						control affects only that credential or application; it does not
+						revoke the other access method. Revocation cannot recall data a
+						client already received.
 					</li>
 				</Bullets>
 				<Callout tone="warning">
@@ -447,8 +488,12 @@ const SECTIONS: readonly LegalSection[] = [
 				<Para>
 					<strong>We do not sell your personal information</strong>, and we have
 					never done so. We do not share it with third parties for their own
-					marketing, advertising or analytics. The complete list of cases where
-					your information leaves our systems is:
+					marketing, advertising or analytics. The categories below are the
+					complete list of cases where your information leaves our systems. The
+					set of MCP recipients is open-ended because applications can register
+					themselves. Data goes to one only after a mandatory, user-initiated
+					and per-application consent that names the recipient and its redirect
+					URI.
 				</Para>
 				<Bullets>
 					<li>
@@ -502,10 +547,18 @@ const SECTIONS: readonly LegalSection[] = [
 					of storing it is to give you your own history.
 				</li>
 				<li>
-					<strong>Authorization credentials</strong> — deleted as soon as you
-					disconnect Google Health in the app. If you revoke at Google instead,
-					the stored tokens stop working immediately and are removed the next
-					time we try to use them.
+					<strong>Google authorization credentials</strong> — deleted as soon as
+					you disconnect Google Health in the app. If you revoke at Google
+					instead, the stored tokens stop working immediately and are removed
+					the next time we try to use them.
+				</li>
+				<li>
+					<strong>MCP application registrations and approvals</strong> — an
+					application registration remains while that client is registered. Your
+					approval remains until you revoke it or delete your account. Revoking
+					an application deletes your approval and the stored MCP access and
+					refresh token rows for your account and that client. It does not
+					delete the third party's application registration.
 				</li>
 				<li>
 					<strong>Account information</strong> — kept until you delete your
@@ -538,7 +591,7 @@ const SECTIONS: readonly LegalSection[] = [
 		body: (
 			<>
 				<Para>
-					These three controls are independent, and you can use any of them at
+					These four controls are independent, and you can use any of them at
 					any time without giving a reason.
 				</Para>
 				<Steps>
@@ -549,12 +602,21 @@ const SECTIONS: readonly LegalSection[] = [
 						</ExternalLink>{" "}
 						and remove {LEGAL.appName}. We can no longer read anything from
 						Google Health from that moment. Copies we already stored are not
-						affected — use step 2 or 3 for those.
+						affected — request their deletion separately below.
 					</li>
 					<li>
 						<strong>Disconnect inside the app.</strong> Your dashboard's Google
 						Health card lets you change or withdraw individual permissions.
 						Disconnecting deletes the stored access and refresh tokens.
+					</li>
+					<li>
+						<strong>Revoke MCP access.</strong> Revoke an API key from the API
+						key tab, or revoke an application from Connected apps. Revoking an
+						application deletes its approval and stored access and refresh
+						tokens; the MCP endpoint rejects its old access token on the next
+						request. Each control affects only that key or application. It does
+						not revoke the other access method or recall data a client already
+						received.
 					</li>
 					<li>
 						<strong>Delete your stored data, or your whole account.</strong>{" "}
@@ -567,7 +629,7 @@ const SECTIONS: readonly LegalSection[] = [
 					</li>
 				</Steps>
 				<Para>
-					Cancelling a paid subscription is a fourth, separate thing, and it
+					Cancelling a paid subscription is another separate action, and it
 					deletes nothing: your account and your data carry on, on the free
 					plan. How to cancel is in the{" "}
 					<Link
