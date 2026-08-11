@@ -279,18 +279,26 @@ function ConnectSnippet({ connection }: { connection: McpConnectionDetails }) {
 				Connect an MCP client
 			</summary>
 
-			<p className="mt-3 max-w-prose text-sm text-muted-foreground">
-				An OAuth-capable client starts authorization from the endpoint's 401
-				challenge, with no pasted credential. Use an API key only when the
-				client requires manual authentication.
-			</p>
-
-			<p className="mt-3 text-xs font-medium uppercase text-muted-foreground">
-				OAuth
-			</p>
-			<pre className="mt-3 overflow-x-auto rounded-md border border-border bg-muted p-3 font-mono text-xs">
-				{connection.oauthCommand}
-			</pre>
+			{connection.oauthEnabled ? (
+				<>
+					<p className="mt-3 max-w-prose text-sm text-muted-foreground">
+						An OAuth-capable client starts authorization from the endpoint's 401
+						challenge, with no pasted credential. Use an API key only when the
+						client requires manual authentication.
+					</p>
+					<p className="mt-3 text-xs font-medium uppercase text-muted-foreground">
+						OAuth
+					</p>
+					<pre className="mt-3 overflow-x-auto rounded-md border border-border bg-muted p-3 font-mono text-xs">
+						{connection.oauthCommand}
+					</pre>
+				</>
+			) : (
+				<p className="mt-3 max-w-prose text-sm text-muted-foreground">
+					Use the API key below as the manual owner credential for this
+					deployment.
+				</p>
+			)}
 
 			<p className="mt-3 text-xs font-medium uppercase text-muted-foreground">
 				API key

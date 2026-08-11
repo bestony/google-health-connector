@@ -25,9 +25,64 @@ interface StoredOAuthClient {
 	redirectUris?: unknown;
 }
 
+interface PublicOAuthClient {
+	client_name?: string;
+}
+
 interface StoredOAuthConsentOwner {
 	id: string;
 	clientId: string;
+}
+
+interface OAuthConsentRecord {
+	id: string;
+	clientId: string;
+	scopes: unknown;
+	createdAt: Date;
+}
+
+function logClientLookupFailure(
+	lookup: "public" | "stored",
+	clientId: string,
+	result: PromiseSettledResult<unknown>,
+): void {
+	if (result.status === "fulfilled") return;
+	log.warn("could not resolve oauth grant client", {
+		lookup,
+		clientId,
+		error:
+			result.reason instanceof Error
+				? result.reason.message
+				: String(result.reason),
+	});
+}
+
+async function resolveOAuthGrantRecord(
+	consent: OAuthConsentRecord,
+	publicClientLookup: Promise<PublicOAuthClient>,
+	storedClientLookup: Promise<StoredOAuthClient | null>,
+): Promise<OAuthGrantRecord> {
+	const [publicClientResult, storedClientResult] = await Promise.allSettled([
+		publicClientLookup,
+		storedClientLookup,
+	]);
+	logClientLookupFailure("public", consent.clientId, publicClientResult);
+	logClientLookupFailure("stored", consent.clientId, storedClientResult);
+
+	return {
+		id: consent.id,
+		clientId: consent.clientId,
+		clientName:
+			publicClientResult.status === "fulfilled"
+				? publicClientResult.value.client_name
+				: undefined,
+		redirectUris:
+			storedClientResult.status === "fulfilled"
+				? storedClientResult.value?.redirectUris
+				: undefined,
+		scopes: consent.scopes,
+		createdAt: consent.createdAt,
+	};
 }
 
 async function requireUserId(headers: Headers): Promise<string> {
@@ -51,8 +106,9 @@ export const fetchOAuthGrantsStatus = createServerFn({ method: "GET" }).handler(
 				auth.$context,
 			]);
 			const records = await Promise.all(
-				consents.map(async (consent): Promise<OAuthGrantRecord> => {
-					const [publicClient, storedClient] = await Promise.all([
+				consents.map((consent) =>
+					resolveOAuthGrantRecord(
+						consent,
 						auth.api.getOAuthClientPublic({
 							headers,
 							query: { client_id: consent.clientId },
@@ -62,17 +118,8 @@ export const fetchOAuthGrantsStatus = createServerFn({ method: "GET" }).handler(
 							where: [{ field: "clientId", value: consent.clientId }],
 							select: ["redirectUris"],
 						}),
-					]);
-
-					return {
-						id: consent.id,
-						clientId: consent.clientId,
-						clientName: publicClient.client_name,
-						redirectUris: storedClient?.redirectUris,
-						scopes: consent.scopes,
-						createdAt: consent.createdAt,
-					};
-				}),
+					),
+				),
 			);
 
 			return { status: "ready", grants: summarizeOAuthGrants(records) };

@@ -127,6 +127,20 @@ describe("OAuth consent scope copy", () => {
 		]);
 	});
 
+	it.each([
+		"constructor",
+		"toString",
+	])("does not read %s from the object prototype", (scope) => {
+		expect(describeConsentScopes([scope])).toEqual([
+			{
+				scope,
+				label: scope,
+				description: "A capability requested by this OAuth client.",
+				known: false,
+			},
+		]);
+	});
+
 	it("recognizes the Google Health MCP scope", () => {
 		expect(requestsGoogleHealthData(["openid", MCP_OAUTH_SCOPE])).toBe(true);
 		expect(requestsGoogleHealthData(["openid"])).toBe(false);

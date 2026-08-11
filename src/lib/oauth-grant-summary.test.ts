@@ -53,7 +53,7 @@ describe("OAuth grant summaries", () => {
 		]);
 
 		expect(summary).toMatchObject({
-			clientName: "Unnamed OAuth client",
+			clientName: "client-1",
 			redirectUris: ["https://client.example/callback"],
 		});
 		expect(summary?.scopes.map((scope) => scope.scope)).toEqual([

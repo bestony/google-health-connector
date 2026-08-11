@@ -728,6 +728,9 @@ Exercise the boundary by hand. The first call has no header: it is the start of 
 path, and its `WWW-Authenticate` response points to protected-resource metadata. `curl` does
 not open a browser or finish OAuth itself, so inspect the two discovery documents next:
 
+Run this walkthrough only on a server with `MCP_OAUTH_ENABLED=true`; the default is `false`,
+and the discovery commands return `404` otherwise.
+
 ```sh
 curl -si http://localhost:3000/mcp \
   -H 'Content-Type: application/json' \

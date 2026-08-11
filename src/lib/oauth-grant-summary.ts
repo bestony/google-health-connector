@@ -84,7 +84,7 @@ export function summarizeOAuthGrants(
 ): readonly OAuthGrantSummary[] {
 	return records
 		.map((record) => {
-			const clientName = record.clientName?.trim() || "Unnamed OAuth client";
+			const clientName = record.clientName?.trim() || record.clientId;
 			const scopeNames = normalizeStringList(record.scopes, SCOPE_SEPARATOR);
 
 			return {

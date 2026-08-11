@@ -86,36 +86,52 @@ const PROVIDER_QUERY_PARAMETERS = [
 const UNSAFE_OBJECT_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 const SCOPE_SEPARATOR = /\s+/;
 
-const KNOWN_SCOPE_COPY: Readonly<
-	Record<string, Omit<ConsentScopeCopy, "scope">>
-> = {
-	openid: {
-		label: "Confirm your account identity",
-		description: "Let the client identify the account that approved access.",
-		known: true,
-	},
-	profile: {
-		label: "Read your basic profile",
-		description: "Share your display name and profile image.",
-		known: true,
-	},
-	email: {
-		label: "Read your email address",
-		description: "Share the email address on this account.",
-		known: true,
-	},
-	offline_access: {
-		label: "Stay connected when you leave",
-		description:
-			"Let the client renew access without asking you to sign in again.",
-		known: true,
-	},
-	[MCP_OAUTH_SCOPE]: {
-		label: "Read your Google Health data through MCP",
-		description: "Allow MCP requests for the health categories listed below.",
-		known: true,
-	},
-};
+const KNOWN_SCOPE_COPY: ReadonlyMap<
+	string,
+	Omit<ConsentScopeCopy, "scope">
+> = new Map([
+	[
+		"openid",
+		{
+			label: "Confirm your account identity",
+			description: "Let the client identify the account that approved access.",
+			known: true,
+		},
+	],
+	[
+		"profile",
+		{
+			label: "Read your basic profile",
+			description: "Share your display name and profile image.",
+			known: true,
+		},
+	],
+	[
+		"email",
+		{
+			label: "Read your email address",
+			description: "Share the email address on this account.",
+			known: true,
+		},
+	],
+	[
+		"offline_access",
+		{
+			label: "Stay connected when you leave",
+			description:
+				"Let the client renew access without asking you to sign in again.",
+			known: true,
+		},
+	],
+	[
+		MCP_OAUTH_SCOPE,
+		{
+			label: "Read your Google Health data through MCP",
+			description: "Allow MCP requests for the health categories listed below.",
+			known: true,
+		},
+	],
+]);
 
 /** Google Health copy derived from the same catalog as the privacy policy. */
 export const GOOGLE_HEALTH_CONSENT_CATEGORIES = GOOGLE_HEALTH_DATA_TYPES.map(
@@ -258,7 +274,7 @@ export function describeConsentScopes(
 	scopes: readonly string[],
 ): readonly ConsentScopeCopy[] {
 	return scopes.map((scope) => {
-		const copy = KNOWN_SCOPE_COPY[scope];
+		const copy = KNOWN_SCOPE_COPY.get(scope);
 		if (copy !== undefined) return { scope, ...copy };
 		return {
 			scope,

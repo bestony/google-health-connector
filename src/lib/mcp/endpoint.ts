@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 import { createServerFn } from "@tanstack/react-start";
-import { getAuthBaseUrl } from "../env.server";
+import { getAuthBaseUrl, isMcpOAuthEnabled } from "../env.server";
 import { createLogger } from "../logger.server";
 import { MCP_ENDPOINT_PATH } from "./oauth-scopes";
 
@@ -25,14 +25,26 @@ const TRAILING_SLASHES = /\/+$/;
 
 export const MCP_ENDPOINT_QUERY_KEY = ["mcp", "endpoint"] as const;
 
-export interface McpConnectionDetails {
+interface McpConnectionBase {
 	/** Absolute URL of this deployment's MCP endpoint. */
 	url: string;
-	/** OAuth-capable Claude Code command. The initial request has no credential. */
-	oauthCommand: string;
 	/** Manual owner-credential command for clients configured with an API key. */
 	apiKeyCommand: string;
 }
+
+export type McpConnectionDetails = McpConnectionBase &
+	(
+		| {
+				/** OAuth discovery and bearer verification are available. */
+				oauthEnabled: true;
+				/** OAuth-capable command. The initial request has no credential. */
+				oauthCommand: string;
+		  }
+		| {
+				/** The deployment's fail-closed OAuth switch is off. */
+				oauthEnabled: false;
+		  }
+	);
 
 export const fetchMcpEndpoint = createServerFn({ method: "GET" }).handler(
 	async (): Promise<McpConnectionDetails> => {
@@ -40,12 +52,19 @@ export const fetchMcpEndpoint = createServerFn({ method: "GET" }).handler(
 		// arrive with a trailing slash; better-auth tolerates that but a naive
 		// concatenation would print `https://host//mcp` into the snippet.
 		const url = `${getAuthBaseUrl().replace(TRAILING_SLASHES, "")}${MCP_ENDPOINT_PATH}`;
-		log.debug("resolved mcp endpoint", { url });
-		return {
+		const oauthEnabled = isMcpOAuthEnabled();
+		log.debug("resolved mcp endpoint", { url, oauthEnabled });
+		const connection = {
 			url,
-			oauthCommand: `claude mcp add --transport http ghealth ${url}`,
 			apiKeyCommand: `claude mcp add --transport http ghealth ${url} \\\n  --header "Authorization: Bearer YOUR_KEY"`,
 		};
+		return oauthEnabled
+			? {
+					...connection,
+					oauthEnabled: true,
+					oauthCommand: `claude mcp add --transport http ghealth ${url}`,
+				}
+			: { ...connection, oauthEnabled: false };
 	},
 );
 
