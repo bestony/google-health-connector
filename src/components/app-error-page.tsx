@@ -75,7 +75,7 @@ export function AppErrorPage({ kind }: AppErrorPageProps) {
 			</div>
 
 			<div className="mx-auto w-full max-w-3xl">
-				<section className="relative overflow-hidden rounded-3xl bg-card/95 p-8 text-center shadow-xl shadow-foreground/5 backdrop-blur sm:p-12">
+				<section className="p-8 text-center sm:p-12">
 					<div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
 						<StatusIcon aria-hidden="true" className="size-7" />
 					</div>
