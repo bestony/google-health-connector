@@ -2,6 +2,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { createServerFn } from "@tanstack/react-start";
 import { getAuthBaseUrl } from "../env.server";
 import { createLogger } from "../logger.server";
+import { MCP_ENDPOINT_PATH } from "./oauth-scopes";
 
 /**
  * The absolute URL of this deployment's MCP endpoint.
@@ -19,9 +20,6 @@ import { createLogger } from "../logger.server";
  */
 
 const log = createLogger("mcp:endpoint");
-
-/** Path the MCP route is mounted at. Mirrors `src/routes/mcp.ts`. */
-export const MCP_ENDPOINT_PATH = "/mcp";
 
 export const MCP_ENDPOINT_QUERY_KEY = ["mcp", "endpoint"] as const;
 

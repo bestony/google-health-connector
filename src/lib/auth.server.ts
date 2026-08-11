@@ -13,6 +13,7 @@ import {
 	getAuthSecret,
 	getGoogleOAuthConfig,
 	getLogLevel,
+	isMcpOAuthEnabled,
 } from "./env.server";
 import { LEGAL } from "./legal";
 import { createLogger } from "./logger.server";
@@ -95,10 +96,12 @@ function googleProvider(): SocialProviders["google"] {
 function createAuth() {
 	const baseURL = getAuthBaseUrl();
 	const { dialect, db } = getDb();
+	const mcpOAuthEnabled = isMcpOAuthEnabled();
 	log.info("creating better-auth instance", {
 		baseURL,
 		dialect,
 		logLevel: getLogLevel(),
+		mcpOAuthEnabled,
 	});
 
 	// Resolved once: `googleProvider()` logs, and it decides below whether the
@@ -117,7 +120,15 @@ function createAuth() {
 		// session into an audience-free JWT without an OAuth client, requested
 		// scopes or consent. OAuth tokens must leave through `/oauth2/token`, where
 		// those bindings are enforced together.
-		disabledPaths: ["/token"],
+		disabledPaths: mcpOAuthEnabled ? ["/token"] : [],
+
+		// Store counters in the shared database rather than process memory. A
+		// serverless cold start must not reset the unauthenticated registration
+		// limit, and local development should exercise the same boundary.
+		rateLimit: {
+			enabled: true,
+			storage: "database",
+		},
 
 		// Drizzle owns the schema; `schema` must be passed explicitly because
 		// drizzle-orm 1.x no longer exposes `db._.fullSchema`. It has to be the
@@ -190,35 +201,45 @@ function createAuth() {
 				},
 			}),
 
-			// OAuth access and ID tokens are signed by the JWT plugin, whose JWKS
-			// endpoint lets resource servers verify them without sharing a secret.
-			// The direct session-to-JWT endpoint it also supplies is disabled above.
-			jwt(),
+			// Conditional registration makes the kill switch remove every OAuth
+			// endpoint instead of leaving mounted endpoints in a broken state.
+			...(mcpOAuthEnabled
+				? [
+						/**
+						 * Keep the issuer at the public origin. The JWT plugin otherwise uses
+						 * better-auth's base URL with `/api/auth` appended, which moves the
+						 * RFC 8414 discovery document away from the root path MCP clients use.
+						 * The signing algorithm and curve must move only with a full JWK
+						 * rotation because stored rows do not retain those values.
+						 */
+						jwt({ jwt: { issuer: baseURL } }),
 
-			// MCP clients discover and register themselves, so registration is open
-			// but deliberately rate-limited. Registration does not make a client
-			// trusted: every client still has to receive the user's consent before it
-			// can obtain the Google Health read scope.
-			oauthProvider({
-				loginPage: "/login",
-				consentPage: "/consent",
-				scopes: [...MCP_OAUTH_SCOPES],
-				allowDynamicClientRegistration: true,
-				allowUnauthenticatedClientRegistration: true,
-				clientRegistrationDefaultScopes: [
-					"openid",
-					"offline_access",
-					MCP_OAUTH_SCOPE,
-				],
-				validAudiences: mcpOAuthAudiences(baseURL),
-				rateLimit: {
-					token: { window: 60, max: 20 },
-					authorize: { window: 60, max: 30 },
-					introspect: { window: 60, max: 100 },
-					revoke: { window: 60, max: 30 },
-					register: { window: 60, max: 5 },
-				},
-			}),
+						// MCP clients discover and register themselves, so registration is
+						// open but deliberately rate-limited. Registration does not make a
+						// client trusted: every client still has to receive the user's consent
+						// before it can obtain the Google Health read scope.
+						oauthProvider({
+							loginPage: "/login",
+							consentPage: "/consent",
+							scopes: [...MCP_OAUTH_SCOPES],
+							allowDynamicClientRegistration: true,
+							allowUnauthenticatedClientRegistration: true,
+							clientRegistrationDefaultScopes: [
+								"openid",
+								"offline_access",
+								MCP_OAUTH_SCOPE,
+							],
+							validAudiences: mcpOAuthAudiences(baseURL),
+							rateLimit: {
+								token: { window: 60, max: 20 },
+								authorize: { window: 60, max: 30 },
+								introspect: { window: 60, max: 100 },
+								revoke: { window: 60, max: 30 },
+								register: { window: 60, max: 5 },
+							},
+						}),
+					]
+				: []),
 
 			// Google One Tap: `POST /api/auth/one-tap/callback` trades the ID token
 			// the browser gets from Google Identity Services for a session, with no

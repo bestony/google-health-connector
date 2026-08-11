@@ -135,6 +135,9 @@ After changing the better-auth config (plugins, `additionalFields`), run
 `pnpm auth:generate`, delete the legacy `relations()` blocks it still emits
 (drizzle-orm 1.x removed them), then generate a migration per dialect.
 
+`better-auth` and `@better-auth/oauth-provider` are an exact-version pair; pin
+both and upgrade them together so their peer graph cannot drift.
+
 ### Google Health: four layers, each with a reason
 
 ```

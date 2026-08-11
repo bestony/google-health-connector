@@ -9,8 +9,11 @@
  * route metadata and browser consent copy can all use it.
  */
 
+/** Path the MCP protected resource is mounted at. */
+export const MCP_ENDPOINT_PATH = "/mcp";
+
 /** Permission to read the connected user's Google Health data through MCP. */
-export const MCP_OAUTH_SCOPE = "health:read";
+export const MCP_OAUTH_SCOPE = "mcp:health:read";
 
 /** Every scope the authorization server advertises to OAuth clients. */
 export const MCP_OAUTH_SCOPES = [
@@ -25,7 +28,7 @@ const TRAILING_SLASHES = /\/+$/;
 
 /** Absolute URI of the MCP protected resource for one deployment. */
 export function mcpResourceUri(baseUrl: string): string {
-	return `${baseUrl.replace(TRAILING_SLASHES, "")}/mcp`;
+	return `${baseUrl.replace(TRAILING_SLASHES, "")}${MCP_ENDPOINT_PATH}`;
 }
 
 /**

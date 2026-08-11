@@ -107,6 +107,18 @@ export function getAuthBaseUrl(): string {
 }
 
 /**
+ * Whether this deployment exposes the MCP OAuth authorization server.
+ *
+ * Missing and unrecognized values fail closed. Enabling OAuth before its
+ * additive tables and discovery routes are deployed would publish an
+ * authorization flow that cannot complete, so only an explicit `true` turns
+ * it on.
+ */
+export function isMcpOAuthEnabled(): boolean {
+	return read("MCP_OAUTH_ENABLED")?.toLowerCase() === "true";
+}
+
+/**
  * Google OAuth client credentials, or the list of variables that are missing.
  *
  * Google sign-in is deliberately optional: a checkout without credentials must

@@ -19,6 +19,7 @@ import {
 	LEGAL_RETENTION,
 } from "./legal";
 import {
+	MCP_ENDPOINT_PATH,
 	MCP_OAUTH_SCOPE,
 	MCP_OAUTH_SCOPES,
 	mcpOAuthAudiences,
@@ -68,6 +69,7 @@ describe("shared product facts", () => {
 	});
 
 	it("defines the MCP OAuth scope and canonical audiences", () => {
+		expect(MCP_ENDPOINT_PATH).toBe("/mcp");
 		expect(MCP_OAUTH_SCOPES).toEqual([
 			"openid",
 			"profile",

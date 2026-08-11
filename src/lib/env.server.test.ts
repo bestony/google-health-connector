@@ -6,6 +6,7 @@ import {
 	getGoogleOAuthConfig,
 	getLogLevel,
 	isLevelEnabled,
+	isMcpOAuthEnabled,
 	isProduction,
 	redactConnectionString,
 } from "./env.server";
@@ -18,6 +19,7 @@ const SCRUBBED_ENV_KEYS = [
 	"TURSO_AUTH_TOKEN",
 	"BETTER_AUTH_SECRET",
 	"BETTER_AUTH_URL",
+	"MCP_OAUTH_ENABLED",
 	"GOOGLE_CLIENT_ID",
 	"GOOGLE_CLIENT_SECRET",
 	"LOG_LEVEL",
@@ -87,6 +89,14 @@ describe("environment configuration", () => {
 		expect(getAuthBaseUrl()).toBe("https://example.test/");
 		vi.stubEnv("BETTER_AUTH_URL", " ");
 		expect(getAuthBaseUrl()).toBe("http://localhost:3000");
+	});
+
+	it("enables MCP OAuth only through an explicit true value", () => {
+		expect(isMcpOAuthEnabled()).toBe(false);
+		vi.stubEnv("MCP_OAUTH_ENABLED", " TRUE ");
+		expect(isMcpOAuthEnabled()).toBe(true);
+		vi.stubEnv("MCP_OAUTH_ENABLED", "false");
+		expect(isMcpOAuthEnabled()).toBe(false);
 	});
 
 	it("reports optional Google configuration and half-filled credentials", () => {
