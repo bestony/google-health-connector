@@ -91,3 +91,27 @@ jobs:
             test-results/
           if-no-files-found: ignore
           retention-days: 7
+
+  vercel-status:
+    name: Vercel deployment status
+    if: ${{ always() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+    needs:
+      - unit
+      - integration
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      statuses: write
+    steps:
+      - name: Verify CI jobs passed
+        if: ${{ needs.unit.result != 'success' || needs.integration.result != 'success' }}
+        run: |
+          echo "Unit or integration tests did not pass."
+          exit 1
+
+      - name: 'notify vercel'
+        if: ${{ always() }}
+        uses: 'vercel/repository-dispatch/actions/status@v1'
+        with:
+          name: 'Vercel - google-health-connector: lint'
