@@ -1,7 +1,8 @@
 import { queryOptions } from "@tanstack/react-query";
 import { createServerFn } from "@tanstack/react-start";
-import { getAuthBaseUrl } from "../env.server";
+import { getAuthBaseUrl, isMcpOAuthEnabled } from "../env.server";
 import { createLogger } from "../logger.server";
+import { MCP_ENDPOINT_PATH } from "./oauth-scopes";
 
 /**
  * The absolute URL of this deployment's MCP endpoint.
@@ -20,19 +21,50 @@ import { createLogger } from "../logger.server";
 
 const log = createLogger("mcp:endpoint");
 
-/** Path the MCP route is mounted at. Mirrors `src/routes/mcp.ts`. */
-export const MCP_ENDPOINT_PATH = "/mcp";
+const TRAILING_SLASHES = /\/+$/;
 
 export const MCP_ENDPOINT_QUERY_KEY = ["mcp", "endpoint"] as const;
 
+interface McpConnectionBase {
+	/** Absolute URL of this deployment's MCP endpoint. */
+	url: string;
+	/** Manual owner-credential command for clients configured with an API key. */
+	apiKeyCommand: string;
+}
+
+export type McpConnectionDetails = McpConnectionBase &
+	(
+		| {
+				/** OAuth discovery and bearer verification are available. */
+				oauthEnabled: true;
+				/** OAuth-capable command. The initial request has no credential. */
+				oauthCommand: string;
+		  }
+		| {
+				/** The deployment's fail-closed OAuth switch is off. */
+				oauthEnabled: false;
+		  }
+	);
+
 export const fetchMcpEndpoint = createServerFn({ method: "GET" }).handler(
-	async (): Promise<string> => {
+	async (): Promise<McpConnectionDetails> => {
 		// `BETTER_AUTH_URL` is read verbatim from the environment, so it may well
 		// arrive with a trailing slash; better-auth tolerates that but a naive
 		// concatenation would print `https://host//mcp` into the snippet.
-		const url = `${getAuthBaseUrl().replace(/\/+$/, "")}${MCP_ENDPOINT_PATH}`;
-		log.debug("resolved mcp endpoint", { url });
-		return url;
+		const url = `${getAuthBaseUrl().replace(TRAILING_SLASHES, "")}${MCP_ENDPOINT_PATH}`;
+		const oauthEnabled = isMcpOAuthEnabled();
+		log.debug("resolved mcp endpoint", { url, oauthEnabled });
+		const connection = {
+			url,
+			apiKeyCommand: `claude mcp add --transport http ghealth ${url} \\\n  --header "Authorization: Bearer YOUR_KEY"`,
+		};
+		return oauthEnabled
+			? {
+					...connection,
+					oauthEnabled: true,
+					oauthCommand: `claude mcp add --transport http ghealth ${url}`,
+				}
+			: { ...connection, oauthEnabled: false };
 	},
 );
 

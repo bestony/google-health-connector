@@ -1,3 +1,4 @@
+import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { oneTapClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
 import { createLogger } from "./logger-client";
@@ -30,6 +31,10 @@ const log = createLogger("auth:one-tap");
 function createOneTapAuthClient(clientId: string) {
 	return createAuthClient({
 		plugins: [
+			// One Tap signs in through this second client, so it must carry the same
+			// signed OAuth continuation as the shared client. Without it, signing in
+			// from an authorization request would create a session but strand the flow.
+			oauthProviderClient(),
 			oneTapClient({
 				clientId,
 

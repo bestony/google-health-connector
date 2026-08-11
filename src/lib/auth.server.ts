@@ -1,7 +1,8 @@
 import { apiKey } from "@better-auth/api-key";
+import { oauthProvider } from "@better-auth/oauth-provider";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
-import { oneTap } from "better-auth/plugins";
+import { jwt, oneTap } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { getDb } from "../db/client.server";
 import type { DatabaseDialect } from "../db/dialect";
@@ -12,9 +13,16 @@ import {
 	getAuthSecret,
 	getGoogleOAuthConfig,
 	getLogLevel,
+	isMcpOAuthEnabled,
 } from "./env.server";
 import { LEGAL } from "./legal";
 import { createLogger } from "./logger.server";
+import {
+	MCP_OAUTH_ACCEPTED_SCOPES,
+	MCP_OAUTH_SCOPE,
+	mcpOAuthAudiences,
+	oauthIssuer,
+} from "./mcp/oauth-scopes";
 
 /**
  * better-auth server instance, backed by Drizzle on whichever database
@@ -89,10 +97,12 @@ function googleProvider(): SocialProviders["google"] {
 function createAuth() {
 	const baseURL = getAuthBaseUrl();
 	const { dialect, db } = getDb();
+	const mcpOAuthEnabled = isMcpOAuthEnabled();
 	log.info("creating better-auth instance", {
 		baseURL,
 		dialect,
 		logLevel: getLogLevel(),
+		mcpOAuthEnabled,
 	});
 
 	// Resolved once: `googleProvider()` logs, and it decides below whether the
@@ -106,6 +116,21 @@ function createAuth() {
 		appName: LEGAL.appName,
 		baseURL,
 		secret: getAuthSecret(),
+
+		// The JWT plugin otherwise exposes `GET /api/auth/token`, which turns a
+		// cookie session into an audience-free JWT without an OAuth client,
+		// requested scopes or consent. This does not disable
+		// `POST /api/auth/oauth2/token`; OAuth tokens must leave through that
+		// endpoint, where those bindings are enforced together.
+		disabledPaths: mcpOAuthEnabled ? ["/token"] : [],
+
+		// Store counters in the shared database rather than process memory. A
+		// serverless cold start must not reset the unauthenticated registration
+		// limit, and local development should exercise the same boundary.
+		rateLimit: {
+			enabled: true,
+			storage: "database",
+		},
 
 		// Drizzle owns the schema; `schema` must be passed explicitly because
 		// drizzle-orm 1.x no longer exposes `db._.fullSchema`. It has to be the
@@ -160,9 +185,10 @@ function createAuth() {
 		},
 
 		plugins: [
-			// API keys, which are what an MCP client authenticates with. Keys are
-			// stored hashed, so the plaintext exists exactly once — in the response
-			// to the call that created it — and the dashboard says so.
+			// API keys are the manual owner-credential path for MCP clients that do
+			// not complete OAuth. Keys are stored hashed, so the plaintext exists
+			// exactly once — in the response to the call that created it — and the
+			// dashboard says so.
 			//
 			// `enableSessionForAPIKeys` is left off (its default): with it on, any
 			// request carrying `x-api-key` would be handed a full mocked session,
@@ -177,6 +203,66 @@ function createAuth() {
 					maxRequests: API_KEY_RATE_LIMIT.maxRequests,
 				},
 			}),
+
+			// Conditional registration makes the kill switch remove every OAuth
+			// endpoint instead of leaving mounted endpoints in a broken state.
+			...(mcpOAuthEnabled
+				? [
+						/**
+						 * Keep the issuer at the public origin. The JWT plugin otherwise uses
+						 * better-auth's base URL with `/api/auth` appended, which moves the
+						 * RFC 8414 discovery document away from the root path MCP clients use.
+						 * The signing algorithm and curve must move only with a full JWK
+						 * rotation because stored rows do not retain those values.
+						 */
+						jwt({ jwt: { issuer: oauthIssuer(baseURL) } }),
+
+						// MCP clients discover and register themselves, so registration is
+						// open but deliberately rate-limited. The provider forces these to be
+						// public clients, rejects client_credentials, requires PKCE S256 and
+						// rejects unsafe redirect schemes. Never pre-create a trusted client or
+						// set skipConsent: every client must receive the user's approval.
+						oauthProvider({
+							loginPage: "/login",
+							consentPage: "/consent",
+							scopes: [...MCP_OAUTH_ACCEPTED_SCOPES],
+							// AS and OIDC discovery describe every accepted scope. Protected-
+							// resource metadata has its own narrower MCP request set so profile
+							// scopes do not appear on the MCP consent screen by default.
+							advertisedMetadata: {
+								scopes_supported: [...MCP_OAUTH_ACCEPTED_SCOPES],
+							},
+							// Keep database token values at the provider's fixed 43-character
+							// SHA-256 base64url digest. This is intentionally explicit even
+							// though it is the default: MySQL generates varchar(255) for the
+							// unique access-token and refresh-token columns, so storing raw
+							// tokens here would make truncation a dialect-only production bug.
+							storeTokens: "hashed",
+							allowDynamicClientRegistration: true,
+							allowUnauthenticatedClientRegistration: true,
+							clientRegistrationDefaultScopes: [
+								"openid",
+								"offline_access",
+								MCP_OAUTH_SCOPE,
+							],
+							validAudiences: mcpOAuthAudiences(baseURL),
+							// Root discovery routes are mounted explicitly because better-auth is
+							// served below /api/auth. These confirmations silence only the matching
+							// startup checks; no path-inserted metadata route is published.
+							silenceWarnings: {
+								oauthAuthServerConfig: true,
+								openidConfig: true,
+							},
+							rateLimit: {
+								token: { window: 60, max: 20 },
+								authorize: { window: 60, max: 30 },
+								introspect: { window: 60, max: 100 },
+								revoke: { window: 60, max: 30 },
+								register: { window: 60, max: 5 },
+							},
+						}),
+					]
+				: []),
 
 			// Google One Tap: `POST /api/auth/one-tap/callback` trades the ID token
 			// the browser gets from Google Identity Services for a session, with no

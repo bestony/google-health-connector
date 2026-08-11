@@ -19,6 +19,17 @@ import {
 	LEGAL_RETENTION,
 } from "./legal";
 import {
+	MCP_ENDPOINT_PATH,
+	MCP_OAUTH_ACCEPTED_SCOPES,
+	MCP_OAUTH_RESOURCE_SCOPES,
+	MCP_OAUTH_SCOPE,
+	mcpOAuthAudiences,
+	mcpResourceUri,
+	oauthIssuer,
+	oauthJwksUrl,
+	protectedResourceMetadata,
+} from "./mcp/oauth-scopes";
+import {
 	FREE_HISTORY_DAYS,
 	MCP_CLIENTS,
 	PLANS,
@@ -59,6 +70,59 @@ describe("shared product facts", () => {
 		);
 		expect(isGoogleHealthScope(GOOGLE_HEALTH_SCOPES.at(0) ?? "")).toBe(true);
 		expect(isGoogleHealthScope("openid")).toBe(false);
+	});
+
+	it("defines the MCP OAuth scope and canonical audiences", () => {
+		expect(MCP_ENDPOINT_PATH).toBe("/mcp");
+		expect(MCP_OAUTH_ACCEPTED_SCOPES).toEqual([
+			"openid",
+			"profile",
+			"email",
+			"offline_access",
+			MCP_OAUTH_SCOPE,
+		]);
+		expect(MCP_OAUTH_RESOURCE_SCOPES).toEqual([
+			MCP_OAUTH_SCOPE,
+			"offline_access",
+		]);
+		expect(new Set(MCP_OAUTH_ACCEPTED_SCOPES).size).toBe(
+			MCP_OAUTH_ACCEPTED_SCOPES.length,
+		);
+		expect(
+			MCP_OAUTH_RESOURCE_SCOPES.every((scope) =>
+				MCP_OAUTH_ACCEPTED_SCOPES.includes(scope),
+			),
+		).toBe(true);
+		expect(MCP_OAUTH_RESOURCE_SCOPES).not.toContain("openid");
+		expect(MCP_OAUTH_ACCEPTED_SCOPES).toContain("openid");
+		expect(oauthIssuer("https://health.example/base/path")).toBe(
+			"https://health.example",
+		);
+		expect(oauthJwksUrl("https://health.example/")).toBe(
+			"https://health.example/api/auth/jwks",
+		);
+		expect(mcpResourceUri("https://health.example")).toBe(
+			"https://health.example/mcp",
+		);
+		expect(mcpResourceUri("https://health.example///")).toBe(
+			"https://health.example/mcp",
+		);
+		expect(mcpOAuthAudiences("https://health.example/")).toEqual([
+			"https://health.example/mcp",
+			"https://health.example",
+		]);
+
+		const metadata = protectedResourceMetadata("https://health.example/");
+		expect(metadata).toEqual({
+			resource: "https://health.example/mcp",
+			authorization_servers: ["https://health.example"],
+			scopes_supported: [MCP_OAUTH_SCOPE, "offline_access"],
+			bearer_methods_supported: ["header"],
+		});
+		expect(mcpOAuthAudiences("https://health.example")).toContain(
+			metadata.resource,
+		);
+		expect(metadata.resource).toBe(mcpResourceUri("https://health.example"));
 	});
 
 	it("keeps pricing and plan claims internally consistent", () => {

@@ -2,6 +2,7 @@ import {
 	createFileRoute,
 	Link,
 	redirect,
+	stripSearchParams,
 	useRouter,
 } from "@tanstack/react-router";
 import { useState } from "react";
@@ -42,11 +43,18 @@ function sanitizeRedirect(value: unknown): string | undefined {
  * `undefined`: TanStack derives the type callers must pass to `<Link search>`
  * from this shape, and nothing linking to `/login` should have to name the
  * OAuth params just to satisfy it.
+ *
+ * Real-browser verification confirms that dropping those unknown provider
+ * fields here does not rewrite `window.location.search` during hydration. The
+ * OAuth client plugin therefore still reads the original signed query,
+ * including repeated `ba_param` fields and its original percent encoding.
  */
 interface LoginSearch {
 	redirect?: string;
 	error?: string;
 	error_description?: string;
+	/** A signed authorization request must remain on this page after sign-in. */
+	oauth?: true;
 }
 
 function validateLoginSearch(search: Record<string, unknown>): LoginSearch {
@@ -61,13 +69,32 @@ function validateLoginSearch(search: Record<string, unknown>): LoginSearch {
 	const description = sanitizeOAuthErrorParam(search.error_description);
 	if (description !== undefined) result.error_description = description;
 
+	if (typeof search.sig === "string" && search.sig.length > 0) {
+		result.oauth = true;
+	}
+
 	return result;
+}
+
+/** Whether better-auth has already started a full-page OAuth redirect. */
+function isAuthRedirectResponse(
+	value: unknown,
+): value is { redirect: true; url: string } {
+	if (typeof value !== "object" || value === null) return false;
+	const candidate = value as { redirect?: unknown; url?: unknown };
+	return candidate.redirect === true && typeof candidate.url === "string";
 }
 
 export const Route = createFileRoute("/login")({
 	validateSearch: validateLoginSearch,
+	search: {
+		// `oauth` is derived routing state, not part of the authorization query.
+		// Keep it available to `beforeLoad` without serializing `oauth=true` into
+		// the signed URL and triggering a canonical redirect on first load.
+		middlewares: [stripSearchParams({ oauth: true })],
+	},
 	beforeLoad: ({ context, search }) => {
-		if (context.session) {
+		if (context.session && search.oauth !== true) {
 			throw redirect({ to: search.redirect ?? "/dashboard" });
 		}
 	},
@@ -123,7 +150,12 @@ function LoginPage() {
 	 * before may have left per-user answers behind, and this navigation is the
 	 * moment they would be read back as the new user's.
 	 */
-	async function completeSignIn() {
+	async function completeSignIn(response: unknown) {
+		// The default better-auth redirect plugin has already assigned
+		// `window.location.href`; any router navigation here could win the race and
+		// discard the signed authorization continuation.
+		if (isAuthRedirectResponse(response)) return;
+
 		queryClient.clear();
 		await router.invalidate();
 		await router.navigate({ to: search.redirect ?? "/dashboard" });
@@ -146,7 +178,7 @@ function LoginPage() {
 			return;
 		}
 
-		await completeSignIn();
+		await completeSignIn(result.data);
 	}
 
 	async function onGoogleSignIn() {

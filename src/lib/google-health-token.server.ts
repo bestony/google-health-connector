@@ -72,9 +72,9 @@ export interface GetGoogleHealthAccessTokenOptions {
 	/**
 	 * Act for this user instead of whoever the request's session belongs to.
 	 *
-	 * This is what lets `/mcp` reach Google: an MCP request carries an API key,
-	 * not a session cookie, so there is no session to read the user from — but
-	 * the key resolves to a user id, and that is enough.
+	 * This is what lets `/mcp` reach Google: an MCP request carries an API key or
+	 * OAuth access token, not a session cookie. Either credential resolves to a
+	 * user id, and that is enough.
 	 */
 	userId?: string;
 }

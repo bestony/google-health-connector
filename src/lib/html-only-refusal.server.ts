@@ -10,17 +10,14 @@ import { createLogger } from "./logger.server";
  * nothing is broken, the caller simply asked for a representation that does not
  * exist here. Server routes (`/mcp`, `/api/auth/*`) never reach that branch.
  *
- * The distinction is not cosmetic for this app. An MCP client that gets a 401
- * from `POST /mcp` follows RFC 9728 and probes
- * `/.well-known/oauth-protected-resource` with `Accept: application/json`. This
- * server authenticates with API keys and deliberately publishes no OAuth
- * metadata, so the honest answer is 404 — "no OAuth here, send the key". A 500
- * instead reads as a server fault worth retrying, which is the one conclusion
- * that leaves the client stuck.
+ * The distinction is not cosmetic for this app. OAuth discovery documents are
+ * explicit server routes and never reach this function. A misspelled discovery
+ * URL or an unrelated unknown path does reach SSR, and a non-HTML client needs
+ * an honest 404 instead of a framework 500 that looks retryable.
  *
  * 404 rather than 406 for the page routes too: the only machine-readable
- * surfaces this deployment has are `/mcp` and `/api/auth/*`, both server
- * routes, so for a non-HTML caller there really is nothing at any other path.
+ * surfaces this deployment has are explicit server routes, so for a non-HTML
+ * caller there really is nothing at an unmatched page path.
  */
 
 const log = createLogger("http:accept");

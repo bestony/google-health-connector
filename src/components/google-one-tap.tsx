@@ -24,14 +24,17 @@ import { getOneTapAuthClient } from "../lib/one-tap-client";
 
 const log = createLogger("auth:one-tap");
 
+const SIGN_IN_CONTINUATION_ERROR =
+	"Sign-in succeeded, but this page could not finish loading. Reload and try again.";
+
 interface GoogleOneTapProps {
 	/** Public Google OAuth client ID, from `fetchSocialProviders()`. */
 	clientId: string;
 	/** The user picked an account; the ID token is on its way to the server. */
 	onStart?: () => void;
-	/** The session cookie has been issued. Navigate from here. */
-	onSuccess: () => void | Promise<void>;
-	/** The server rejected the ID token. Receives ready-to-display copy. */
+	/** The session cookie has been issued. Continue unless OAuth is redirecting. */
+	onSuccess: (response: unknown) => void | Promise<void>;
+	/** The sign-in callback or its continuation failed. Receives display copy. */
 	onError: (message: string) => void;
 }
 
@@ -53,6 +56,19 @@ const MOMENT_READERS: ReadonlyArray<readonly [string, keyof PromptMoment]> = [
 	["skippedReason", "getSkippedReason"],
 	["notDisplayedReason", "getNotDisplayedReason"],
 ];
+
+/** Run a post-sign-in callback without losing synchronous or async failures. */
+function runSuccessHandler(
+	handler: (result: unknown) => void | Promise<void>,
+	payload: unknown,
+	onFailure: (error: unknown) => void,
+): void {
+	try {
+		void Promise.resolve(handler(payload)).catch(onFailure);
+	} catch (error) {
+		onFailure(error);
+	}
+}
 
 function describePromptMoment(notification: unknown): Record<string, unknown> {
 	if (notification === null || typeof notification !== "object") {
@@ -122,9 +138,17 @@ export function GoogleOneTap({
 						log.debug("exchanging id token for a session");
 						if (mounted.current) handlers.current.onStart?.();
 					},
-					onSuccess: () => {
+					onSuccess: ({ data }) => {
 						log.info("sign-in succeeded");
-						if (mounted.current) void handlers.current.onSuccess();
+						if (!mounted.current) return;
+						runSuccessHandler(handlers.current.onSuccess, data, (error) => {
+							log.error("post-sign-in continuation failed", {
+								error: error instanceof Error ? error.message : String(error),
+							});
+							if (mounted.current) {
+								handlers.current.onError(SIGN_IN_CONTINUATION_ERROR);
+							}
+						});
 					},
 					onError: ({ error }) => {
 						log.error("callback rejected", {

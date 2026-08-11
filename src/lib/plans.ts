@@ -111,7 +111,7 @@ export const PLANS: readonly Plan[] = [
 		features: [
 			"Live readings from Google Health",
 			`${FREE_HISTORY_DAYS} days of history`,
-			"MCP endpoint and one API key",
+			"MCP access with one API key, plus OAuth when enabled",
 			`Works with ${MCP_CLIENTS.join(", ")} and any MCP client`,
 		],
 		featured: false,

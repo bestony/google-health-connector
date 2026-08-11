@@ -1,6 +1,7 @@
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import { ApiKeyCard } from "../components/api-key-card";
+import { ConnectedAppsCard } from "../components/connected-apps-card";
 import { GoogleHealthAuthorization } from "../components/google-health-authorization";
 import {
 	Tabs,
@@ -17,6 +18,10 @@ import {
 import { googleHealthAccessQueryOptions } from "../lib/google-health-access";
 import { hasAllGoogleHealthScopes } from "../lib/google-health-scopes";
 import { mcpEndpointQueryOptions } from "../lib/mcp/endpoint";
+import {
+	OAUTH_GRANTS_QUERY_KEY,
+	oauthGrantsQueryOptions,
+} from "../lib/oauth-grants";
 import { preventSilentAccess } from "../lib/one-tap-client";
 
 /**
@@ -74,15 +79,16 @@ export const Route = createFileRoute("/dashboard")({
 	},
 	// Each card's whole shape — badge, button label, contents — follows from
 	// what the server already knows, so all of it is resolved before paint
-	// rather than popped in afterwards. The three are independent, so they are
+	// rather than popped in afterwards. The four are independent, so they are
 	// fetched together instead of in sequence.
 	loader: async ({ context }) => {
-		const [health, apiKey, mcpUrl] = await Promise.all([
+		const [health, apiKey, oauthGrants, mcpConnection] = await Promise.all([
 			context.queryClient.ensureQueryData(googleHealthAccessQueryOptions()),
 			context.queryClient.ensureQueryData(apiKeyQueryOptions()),
+			context.queryClient.ensureQueryData(oauthGrantsQueryOptions()),
 			context.queryClient.ensureQueryData(mcpEndpointQueryOptions()),
 		]);
-		return { health, apiKey, mcpUrl };
+		return { health, apiKey, oauthGrants, mcpConnection };
 	},
 	component: DashboardPage,
 });
@@ -91,7 +97,7 @@ function DashboardPage() {
 	const router = useRouter();
 	const { session, queryClient } = Route.useRouteContext();
 	const search = Route.useSearch();
-	const { health, apiKey, mcpUrl } = Route.useLoaderData();
+	const { health, apiKey, oauthGrants, mcpConnection } = Route.useLoaderData();
 	const [pending, setPending] = useState(false);
 
 	// A failed link round trip lands here as a query param, so it has to be read
@@ -103,11 +109,11 @@ function DashboardPage() {
 
 	// Which tab opens follows from where the user is in the setup: until every
 	// permission is granted the work to do is on the Google Health tab, and once
-	// it all is, the thing they came back for is the key. Two arrivals win over
-	// that. An OAuth error renders inside the Google Health card, and a default
-	// that hides it would read as a silent success. And the load that just
-	// returned from Google's consent screen opens on the confirmation and the
-	// report of what was actually granted — the key is for every visit after.
+	// it all is, the manual connection controls are on the API key tab. OAuth
+	// clients enter through the authorization flow and land on `/consent`, not on
+	// this dashboard. Two arrivals win over the default: an OAuth error renders
+	// inside the Google Health card, and hiding it would read as a silent success;
+	// a completed Google grant opens on its confirmation and actual scope report.
 	const justAuthorized = search.health === "granted";
 	const allGranted =
 		health.status === "linked" &&
@@ -129,6 +135,11 @@ function DashboardPage() {
 	 */
 	async function onApiKeyChanged() {
 		queryClient.removeQueries({ queryKey: API_KEY_QUERY_KEY });
+		await router.invalidate();
+	}
+
+	async function onOAuthGrantsChanged() {
+		queryClient.removeQueries({ queryKey: OAUTH_GRANTS_QUERY_KEY });
 		await router.invalidate();
 	}
 
@@ -174,9 +185,10 @@ function DashboardPage() {
 				<TabsList>
 					<TabsTrigger value="google-health">Google Health</TabsTrigger>
 					<TabsTrigger value="api-key">API key</TabsTrigger>
+					<TabsTrigger value="connected-apps">Connected apps</TabsTrigger>
 				</TabsList>
-				{/* Both panels are kept mounted: Base UI unmounts a hidden panel by
-				    default, and both cards hold state that must survive a tab switch —
+				{/* All panels are kept mounted: Base UI unmounts a hidden panel by
+				    default, and the cards hold state that must survive a tab switch —
 				    above all ApiKeyCard's plaintext key, which is shown exactly once
 				    from local state and is unrecoverable once the card unmounts. A
 				    hidden panel is rendered `hidden` and `inert`, so keeping it costs
@@ -194,8 +206,14 @@ function DashboardPage() {
 				<TabsContent keepMounted value="api-key">
 					<ApiKeyCard
 						status={apiKey}
-						mcpUrl={mcpUrl}
+						mcpConnection={mcpConnection}
 						onChanged={onApiKeyChanged}
+					/>
+				</TabsContent>
+				<TabsContent keepMounted value="connected-apps">
+					<ConnectedAppsCard
+						status={oauthGrants}
+						onChanged={onOAuthGrantsChanged}
 					/>
 				</TabsContent>
 			</Tabs>
