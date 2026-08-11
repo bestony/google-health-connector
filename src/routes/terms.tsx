@@ -82,8 +82,8 @@ const SECTIONS: readonly LegalSection[] = [
 						connect your Google Account and authorize access to Google Health;
 					</li>
 					<li>
-						read the health data categories you authorized, and keep your own
-						stored copy of them;
+						read the health data categories you authorized, live from Google,
+						without storing a server-side copy;
 					</li>
 					<li>
 						write records back to Google Health, for the categories where you
@@ -206,11 +206,12 @@ const SECTIONS: readonly LegalSection[] = [
 				</Para>
 				<Para>
 					You grant us a limited, non-exclusive, revocable, royalty-free licence
-					to store, process and transmit your data solely to operate the
-					features you asked for — retrieving it from Google, keeping your copy,
-					showing it to you, writing back what you asked to write, and serving
-					it to an MCP client you connected. The licence exists only to make the
-					Service work, and it ends when you delete the data or your account.
+					to process and transmit your data solely to operate the features you
+					asked for — retrieving it live from Google, returning it to you,
+					writing back what you asked to write, and serving it to an MCP client
+					you connected. The licence exists only to make the Service work, and
+					it ends when you withdraw the applicable permission or delete your
+					account.
 				</Para>
 				<Para>
 					We do not use your health data to train or fine-tune machine learning
@@ -325,7 +326,7 @@ const SECTIONS: readonly LegalSection[] = [
 				add, change, suspend or discontinue features at any time, and there is
 				no uptime commitment or service level agreement. If we decide to shut
 				the Service down permanently, we will give you reasonable advance notice
-				and a window in which to export or delete your data.
+				and a window in which to export or delete your stored account data.
 			</Para>
 		),
 	},
@@ -737,15 +738,15 @@ function TermsOfServicePage() {
 					<Para>
 						These terms set out what you can expect from {LEGAL.appName} and
 						what we expect from you. They are deliberately short on ceremony:
-						the Service reads health data you already own, keeps your copy of
-						it, and hands it to tools you choose.
+						the Service reads health data you already own live from Google and
+						hands it to tools you choose, without storing a server-side copy.
 					</Para>
 					<Para>
 						Two sections matter more than the rest. Read{" "}
 						<Ref id="not-medical-advice" /> before you act on anything the
 						Service shows you, and <Ref id="mcp" /> before you connect an MCP
-						client — that is the one path by which your health data leaves our
-						servers.
+						client — that feature sends your health data from our servers to a
+						third party you choose.
 					</Para>
 				</>
 			}

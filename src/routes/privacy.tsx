@@ -38,7 +38,7 @@ export const Route = createFileRoute("/privacy")({
 			{ title: `Privacy Policy — ${LEGAL.appName}` },
 			{
 				name: "description",
-				content: `How ${LEGAL.appName} collects, uses, stores and deletes your Google Health data.`,
+				content: `How ${LEGAL.appName} accesses, uses and protects your Google Health data, and how you can stop access.`,
 			},
 		],
 	}),
@@ -106,23 +106,23 @@ const SECTIONS: readonly LegalSection[] = [
 						Google's consent screen, and only the categories you leave ticked.
 					</li>
 					<li>
-						We store a copy of that data on servers we control, so that the app
-						can answer your questions about your own history without calling
-						Google every time.
+						We read each record live from Google when you or a connected MCP
+						client requests it. We do not write health records to our database
+						or server-side caches.
 					</li>
 					<li>
 						We do not sell your data, we do not use it for advertising, and we
 						do not hand it to anyone else to use for their own purposes.
 					</li>
 					<li>
-						Your health data leaves our servers only when you connect a Model
-						Context Protocol (MCP) client yourself. You choose that client, and
-						the data goes where you point it.
+						We transmit your health data to a Model Context Protocol (MCP)
+						client only when you connect that client yourself. You choose the
+						client, and the data goes where you point it.
 					</li>
 					<li>
-						You can revoke our access at Google, revoke an API key or an
-						application's approval, delete the copies we hold, or delete your
-						account entirely, at any time, without giving a reason.
+						You can revoke our access at Google, revoke an API key, revoke an
+						application's approval, or delete your account entirely at any time,
+						without giving a reason.
 					</li>
 					<li>
 						We do not use your health data to train machine learning models.
@@ -208,6 +208,13 @@ const SECTIONS: readonly LegalSection[] = [
 					leave unticked on Google's consent screen, we never receive. Your
 					dashboard shows exactly which permissions Google actually granted.
 				</Para>
+				<Para>
+					The Service retrieves health records directly from Google for each
+					request. It processes a record in memory only long enough to return
+					the response you requested or send it to an MCP client you connected.
+					It does not write the record to a database, a server-side cache or a
+					backup.
+				</Para>
 
 				<Subheading>c. Google authorization credentials</Subheading>
 				<Para>
@@ -280,8 +287,8 @@ const SECTIONS: readonly LegalSection[] = [
 					</li>
 					<li>
 						<strong>Google Health data</strong> — to retrieve the records you
-						authorized, store your copy, show it back to you, write records you
-						ask the app to write, and serve it to an MCP client you have
+						authorized directly from Google, return them to you, write records
+						you ask the app to write, and send them to an MCP client you
 						connected.
 					</li>
 					<li>
@@ -529,8 +536,8 @@ const SECTIONS: readonly LegalSection[] = [
 					<li>
 						<strong>Change of operator</strong> — if the Service is ever
 						transferred to another operator, we will give you notice in advance,
-						so that you can export or delete your data before the transfer takes
-						effect.
+						so that you can export or delete your stored account data before the
+						transfer takes effect.
 					</li>
 				</Bullets>
 			</>
@@ -542,15 +549,16 @@ const SECTIONS: readonly LegalSection[] = [
 		body: (
 			<Bullets>
 				<li>
-					<strong>Google Health data</strong> — kept until you delete it or
-					delete your account. There is no automatic expiry, because the point
-					of storing it is to give you your own history.
+					<strong>Google Health data</strong> — not retained on our servers. We
+					read it from Google for one request and do not write it to our
+					database, server-side caches or backups. Google keeps the source
+					records under your Google Account settings.
 				</li>
 				<li>
-					<strong>Google authorization credentials</strong> — deleted as soon as
-					you disconnect Google Health in the app. If you revoke at Google
-					instead, the stored tokens stop working immediately and are removed
-					the next time we try to use them.
+					<strong>Google authorization credentials</strong> — updated when
+					Google refreshes them or you authorize again, and removed when we
+					delete your account data. If you revoke access at Google, the stored
+					tokens stop working immediately.
 				</li>
 				<li>
 					<strong>MCP application registrations and approvals</strong> — an
@@ -577,7 +585,8 @@ const SECTIONS: readonly LegalSection[] = [
 					in your health data.
 				</li>
 				<li>
-					<strong>Backups</strong> — encrypted backups roll off within{" "}
+					<strong>Backups</strong> — encrypted backups of stored Service data
+					other than health records roll off within{" "}
 					{LEGAL_RETENTION.backupPurgeDays} days, so data you deleted can
 					persist in a backup for up to that long before it is gone for good. We
 					do not restore deleted data from backups.
@@ -587,12 +596,12 @@ const SECTIONS: readonly LegalSection[] = [
 	},
 	{
 		id: "your-choices",
-		title: "Revoking access and deleting your data",
+		title: "Revoking access and deleting stored account data",
 		body: (
 			<>
 				<Para>
-					These four controls are independent, and you can use any of them at
-					any time without giving a reason.
+					These four controls are independent. You can use any of them at any
+					time without giving a reason.
 				</Para>
 				<Steps>
 					<li>
@@ -601,36 +610,35 @@ const SECTIONS: readonly LegalSection[] = [
 							{LEGAL_LINKS.googlePermissions}
 						</ExternalLink>{" "}
 						and remove {LEGAL.appName}. We can no longer read anything from
-						Google Health from that moment. Copies we already stored are not
-						affected — request their deletion separately below.
+						Google Health from that moment. We hold no server-side copy of your
+						health records to delete. Revocation cannot recall data an MCP
+						client already received.
 					</li>
 					<li>
-						<strong>Disconnect inside the app.</strong> Your dashboard's Google
-						Health card lets you change or withdraw individual permissions.
-						Disconnecting deletes the stored access and refresh tokens.
+						<strong>Revoke the API key.</strong> Use the API key tab on your
+						dashboard. Requests with that key stop working immediately. This
+						does not revoke an OAuth application's approval.
 					</li>
 					<li>
-						<strong>Revoke MCP access.</strong> Revoke an API key from the API
-						key tab, or revoke an application from Connected apps. Revoking an
-						application deletes its approval and stored access and refresh
-						tokens; the MCP endpoint rejects its old access token on the next
-						request. Each control affects only that key or application. It does
-						not revoke the other access method or recall data a client already
-						received.
+						<strong>Revoke an OAuth application.</strong> Use Connected apps on
+						your dashboard. Revocation deletes the application's approval and
+						stored access and refresh tokens. The MCP endpoint rejects its old
+						access token on the next request. This does not revoke your API key
+						or recall data the application already received.
 					</li>
 					<li>
-						<strong>Delete your stored data, or your whole account.</strong>{" "}
-						Email <ContactEmail /> from the address on the account and say
-						whether you want the health data deleted or the entire account
-						removed. We complete it within {LEGAL_RETENTION.deletionRequestDays}{" "}
-						days and confirm when it is done. Deletion is permanent; see the
-						backup window — and the billing records we are not allowed to
-						destroy — in <Ref id="retention" />.
+						<strong>Delete stored account data, or your whole account.</strong>{" "}
+						Email <ContactEmail /> from the address on the account and say which
+						stored account information you want deleted or whether you want the
+						entire account removed. We complete it within{" "}
+						{LEGAL_RETENTION.deletionRequestDays} days and confirm when it is
+						done. Deletion is permanent; see the backup window — and the billing
+						records we are not allowed to destroy — in <Ref id="retention" />.
 					</li>
 				</Steps>
 				<Para>
 					Cancelling a paid subscription is another separate action, and it
-					deletes nothing: your account and your data carry on, on the free
+					deletes nothing: your account and its stored data remain on the free
 					plan. How to cancel is in the{" "}
 					<Link
 						className="text-primary underline underline-offset-2"
@@ -743,8 +751,8 @@ const SECTIONS: readonly LegalSection[] = [
 				The Service is not intended for anyone under 18, and we do not knowingly
 				collect personal information — least of all health information — from
 				anyone under 18. If you believe someone under 18 has given us data,
-				email <ContactEmail /> and we will delete the account and its data
-				promptly.
+				email <ContactEmail /> and we will delete the account and its stored
+				account data promptly.
 			</Para>
 		),
 	},
@@ -759,8 +767,8 @@ const SECTIONS: readonly LegalSection[] = [
 				we will notify you by email or in the app before it takes effect, and
 				where the law requires it we will ask for your consent again. Continuing
 				to use the Service after a change takes effect means you accept the
-				updated policy; if you do not, you can delete your data and your account
-				as described in <Ref id="your-choices" />.
+				updated policy; if you do not, you can delete your stored account data
+				and your account as described in <Ref id="your-choices" />.
 			</Para>
 		),
 	},
@@ -795,10 +803,10 @@ function PrivacyPolicyPage() {
 				<>
 					<Para>
 						{LEGAL.appName} connects to your Google Health data so that you can
-						see, keep and use your own health history — including through AI
-						tools you choose to run yourself. Health data is about as personal
-						as data gets, so this policy sets out plainly what we collect, why,
-						where it goes, and how to make it go away.
+						inspect and use your own health history — including through AI tools
+						you choose to run yourself. Health data is about as personal as data
+						gets, so this policy sets out plainly what we collect, why, where it
+						goes, and how to stop access.
 					</Para>
 					<Para>
 						It applies to everyone who uses {LEGAL.appName}, and it is written

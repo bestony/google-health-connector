@@ -15,13 +15,14 @@ export function GoogleHealthDataDisclosure() {
 				<strong className="text-foreground">
 					Before you grant this, here is what happens to the data.
 				</strong>{" "}
-				We read the categories you leave ticked and store a copy on our servers
-				so your history stays available to you. We never sell it, use it for
-				advertising, or hand it to anyone else for their own purposes. It leaves
-				our servers only when you connect an MCP client yourself.
+				We read the categories you leave ticked directly from Google when you or
+				an MCP client you connect makes a request. We do not store a copy of
+				your health records on our servers. We never sell the data, use it for
+				advertising, or hand it to anyone else for their own purposes. We send
+				it to an MCP client only when you connect that client yourself.
 			</p>
 			<p className="mt-2">
-				You can withdraw this at any time — from{" "}
+				You can stop future access at any time: remove this Service from{" "}
 				<a
 					className="underline underline-offset-2"
 					href={LEGAL_LINKS.googlePermissions}
@@ -29,8 +30,10 @@ export function GoogleHealthDataDisclosure() {
 					target="_blank"
 				>
 					your Google account permissions
-				</a>{" "}
-				— and ask us to delete the stored copy. Full detail in the{" "}
+				</a>
+				, revoke an OAuth application under Connected apps, or revoke your API
+				key. Revocation cannot remove data that an MCP client already received.
+				Full detail is in the{" "}
 				<Link className="underline underline-offset-2" to="/privacy">
 					Privacy Policy
 				</Link>
