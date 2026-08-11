@@ -272,9 +272,12 @@ export function createGoogleHealthClient(
 
 	function listQuery(
 		id: GoogleHealthDataTypeId,
-		options: ListDataPointsOptions,
+		listOptions: ListDataPointsOptions,
 	): Record<string, string | number | undefined> {
-		if (options.filter !== undefined && (options.from ?? options.to)) {
+		if (
+			listOptions.filter !== undefined &&
+			(listOptions.from ?? listOptions.to)
+		) {
 			throw new Error(
 				"Pass either `filter` or a time range, not both: the two would have " +
 					"to be combined, and only the caller knows how.",
@@ -282,36 +285,42 @@ export function createGoogleHealthClient(
 		}
 
 		return {
-			pageSize: options.pageSize,
-			pageToken: options.pageToken,
+			pageSize: listOptions.pageSize,
+			pageToken: listOptions.pageToken,
 			filter:
-				options.filter ??
-				dataPointTimeFilter(id, { from: options.from, to: options.to }),
+				listOptions.filter ??
+				dataPointTimeFilter(id, {
+					from: listOptions.from,
+					to: listOptions.to,
+				}),
 		};
 	}
 
 	async function listDataPoints(
 		id: GoogleHealthDataTypeId,
-		options: ListDataPointsOptions = {},
+		listOptions: ListDataPointsOptions = {},
 	): Promise<ListDataPointsResponse> {
 		return request<ListDataPointsResponse>(
 			"GET",
 			`${dataPointsParent(id)}/dataPoints`,
-			{ query: listQuery(id, options) },
+			{ query: listQuery(id, listOptions) },
 		);
 	}
 
 	async function* iterateDataPoints(
 		id: GoogleHealthDataTypeId,
-		options: ListDataPointsOptions = {},
+		iterateOptions: ListDataPointsOptions = {},
 	): AsyncGenerator<DataPoint, void, undefined> {
-		let pageToken = options.pageToken;
+		let pageToken = iterateOptions.pageToken;
 		let pages = 0;
 
 		do {
+			// Pagination is intentionally sequential: the next page token is returned
+			// by this request, so the loop cannot be parallelized safely.
+			// biome-ignore lint/performance/noAwaitInLoops: nextPageToken requires ordered requests
 			const page = await listDataPoints(id, {
-				...options,
-				pageSize: options.pageSize ?? DEFAULT_PAGE_SIZE,
+				...iterateOptions,
+				pageSize: iterateOptions.pageSize ?? DEFAULT_PAGE_SIZE,
 				pageToken,
 			});
 			pages += 1;
@@ -333,8 +342,8 @@ export function createGoogleHealthClient(
 		listDataPoints,
 		iterateDataPoints,
 
-		async collectDataPoints(id, options = {}) {
-			const { limit, ...rest } = options;
+		async collectDataPoints(id, collectOptions = {}) {
+			const { limit, ...rest } = collectOptions;
 			const points: DataPoint[] = [];
 			for await (const point of iterateDataPoints(id, rest)) {
 				points.push(point);

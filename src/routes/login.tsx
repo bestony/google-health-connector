@@ -231,8 +231,8 @@ function LoginPage() {
 						setOneTapPending(true);
 					}}
 					onSuccess={completeSignIn}
-					onError={(message) => {
-						setError(message);
+					onError={(oneTapMessage) => {
+						setError(oneTapMessage);
 						setOneTapPending(false);
 					}}
 				/>
@@ -312,7 +312,7 @@ function LoginPage() {
 					type="submit"
 					disabled={busy}
 				>
-					{pending ? "Working…" : mode === "signin" ? "Sign in" : "Sign up"}
+					{submitLabel(pending, mode)}
 				</button>
 			</form>
 
@@ -346,4 +346,9 @@ function LoginPage() {
 			</p>
 		</div>
 	);
+}
+
+function submitLabel(pending: boolean, mode: Mode): string {
+	if (pending) return "Working…";
+	return mode === "signin" ? "Sign in" : "Sign up";
 }

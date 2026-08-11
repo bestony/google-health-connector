@@ -64,11 +64,11 @@ export const fetchGoogleHealthAccess = createServerFn({
 		return { status: "unavailable" };
 	}
 
-	const google = accounts.filter(
-		(account) => account.providerId === GOOGLE_PROVIDER_ID,
+	const googleAccounts = accounts.filter(
+		(linkedAccount) => linkedAccount.providerId === GOOGLE_PROVIDER_ID,
 	);
 
-	if (google.length === 0) {
+	if (googleAccounts.length === 0) {
 		log.debug("no google account linked", { accounts: accounts.length });
 		return { status: "unlinked" };
 	}
@@ -76,10 +76,10 @@ export const fetchGoogleHealthAccess = createServerFn({
 	// better-auth resolves tokens by taking the first account matching the
 	// provider, so the scopes shown have to come from that same row or the UI
 	// would describe an account the API calls will not use.
-	const [account] = google;
-	if (google.length > 1) {
+	const [account] = googleAccounts;
+	if (googleAccounts.length > 1) {
 		log.warn("multiple google accounts linked; using the first", {
-			count: google.length,
+			count: googleAccounts.length,
 			accountId: account.accountId,
 		});
 	}

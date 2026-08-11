@@ -55,11 +55,28 @@ export interface GoogleHealthAccessToken {
 export class GoogleHealthAuthorizationError extends Error {
 	readonly missingScopes: readonly string[];
 
-	constructor(message: string, missingScopes: readonly string[] = []) {
-		super(message);
+	constructor(
+		message: string,
+		missingScopes: readonly string[] = [],
+		options?: ErrorOptions,
+	) {
+		super(message, options);
 		this.name = "GoogleHealthAuthorizationError";
 		this.missingScopes = missingScopes;
 	}
+}
+
+function resolveAccessToken(userId: string | undefined) {
+	if (userId === undefined) {
+		return getAuth().api.getAccessToken({
+			body: { providerId: GOOGLE_PROVIDER_ID },
+			headers: getRequest().headers,
+		});
+	}
+
+	return getAuth().api.getAccessToken({
+		body: { providerId: GOOGLE_PROVIDER_ID, userId },
+	});
 }
 
 export interface GetGoogleHealthAccessTokenOptions {
@@ -101,14 +118,7 @@ export async function getGoogleHealthAccessToken({
 		// `userId` would fail for exactly the callers the `userId` exists for.
 		// Anything that later "tidies this up" by always passing headers breaks
 		// `/mcp` and nothing else, which is a hard bug to find.
-		token = await (userId === undefined
-			? getAuth().api.getAccessToken({
-					body: { providerId: GOOGLE_PROVIDER_ID },
-					headers: getRequest().headers,
-				})
-			: getAuth().api.getAccessToken({
-					body: { providerId: GOOGLE_PROVIDER_ID, userId },
-				}));
+		token = await Promise.resolve(resolveAccessToken(userId));
 	} catch (error) {
 		// better-auth collapses "no linked account" and "the refresh call failed"
 		// into BAD_REQUEST. Both mean the same thing to a caller: send the user
@@ -117,9 +127,13 @@ export async function getGoogleHealthAccessToken({
 			userId: userId ?? null,
 			error: error instanceof Error ? error.message : String(error),
 		});
+		// The custom error stores the original failure in `cause`; the explicit
+		// suppression keeps Biome from treating this domain error as a plain Error.
+		// biome-ignore lint/nursery/useErrorCause: cause is passed through the custom error constructor
 		throw new GoogleHealthAuthorizationError(
 			"No usable Google authorization. Ask the user to reconnect Google Health.",
 			requiredScopes,
+			{ cause: error },
 		);
 	}
 

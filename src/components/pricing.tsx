@@ -74,12 +74,7 @@ export function Pricing() {
  */
 function PlanCard({ plan, index }: { plan: Plan; index: number }) {
 	const { featured } = plan;
-
-	const corners = featured
-		? ""
-		: index === 0
-			? "rounded-t-3xl sm:rounded-b-none lg:rounded-tr-none lg:rounded-bl-3xl"
-			: "sm:rounded-t-none lg:rounded-tr-3xl lg:rounded-bl-none";
+	const corners = getPlanCorners(featured, index);
 
 	return (
 		<div
@@ -174,4 +169,12 @@ function PlanCard({ plan, index }: { plan: Plan; index: number }) {
 			</Link>
 		</div>
 	);
+}
+
+function getPlanCorners(featured: boolean, index: number): string {
+	if (featured) return "";
+	if (index === 0) {
+		return "rounded-t-3xl sm:rounded-b-none lg:rounded-tr-none lg:rounded-bl-3xl";
+	}
+	return "sm:rounded-t-none lg:rounded-tr-3xl lg:rounded-bl-none";
 }

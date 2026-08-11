@@ -55,7 +55,7 @@ export function GoogleSignInButton({
 			className="flex h-10 w-full items-center justify-center gap-3 rounded-md border border-[#747775] bg-white px-3 text-sm font-medium text-[#1f1f1f] transition-colors hover:bg-[#f7f8f8] disabled:cursor-not-allowed disabled:opacity-50 dark:border-[#8e918f] dark:bg-[#131314] dark:text-[#e3e3e3] dark:hover:bg-[#1f1f20]"
 			type="button"
 			onClick={onClick}
-			disabled={disabled || pending}
+			disabled={disabled ? true : pending}
 		>
 			<GoogleMark />
 			{pending ? "Redirecting to Google…" : "Continue with Google"}

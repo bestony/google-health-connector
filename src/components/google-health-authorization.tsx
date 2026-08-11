@@ -115,11 +115,7 @@ export function GoogleHealthAuthorization({
 						onClick={onAuthorize}
 						disabled={pending}
 					>
-						{pending
-							? "Redirecting to Google…"
-							: grantedCount === 0
-								? "Authorize Google Health"
-								: "Update Google Health permissions"}
+						{authorizationButtonLabel(pending, grantedCount)}
 					</button>
 
 					<span className="text-sm text-muted-foreground">
@@ -197,22 +193,7 @@ function StatusBadge({
 	access: GoogleHealthAccess;
 	grantedCount: number;
 }) {
-	const label = (() => {
-		switch (access.status) {
-			case "disabled":
-				return "Google sign-in off";
-			case "unavailable":
-				return "Status unknown";
-			case "unlinked":
-				return "Not connected";
-			default:
-				return grantedCount === 0
-					? "Connected, no data access"
-					: grantedCount === GOOGLE_HEALTH_SCOPES.length
-						? "All permissions granted"
-						: "Some permissions granted";
-		}
-	})();
+	const label = accessStatusLabel(access, grantedCount);
 
 	const connected =
 		access.status === "linked" && grantedCount === GOOGLE_HEALTH_SCOPES.length;
@@ -228,6 +209,35 @@ function StatusBadge({
 			{label}
 		</span>
 	);
+}
+
+function authorizationButtonLabel(
+	pending: boolean,
+	grantedCount: number,
+): string {
+	if (pending) return "Redirecting to Google…";
+	return grantedCount === 0
+		? "Authorize Google Health"
+		: "Update Google Health permissions";
+}
+
+function accessStatusLabel(
+	access: GoogleHealthAccess,
+	grantedCount: number,
+): string {
+	switch (access.status) {
+		case "disabled":
+			return "Google sign-in off";
+		case "unavailable":
+			return "Status unknown";
+		case "unlinked":
+			return "Not connected";
+		default:
+			if (grantedCount === 0) return "Connected, no data access";
+			return grantedCount === GOOGLE_HEALTH_SCOPES.length
+				? "All permissions granted"
+				: "Some permissions granted";
+	}
 }
 
 /**

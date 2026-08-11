@@ -122,17 +122,17 @@ function formatDate(date: unknown): string | undefined {
  */
 export function summarizeDataPoint(point: DataPoint): DataPointSummary | null {
 	const entry = Object.entries(point).find(
-		([key, value]) =>
+		([key, candidate]) =>
 			DATA_POINT_PAYLOAD_FIELDS.has(key) &&
-			typeof value === "object" &&
-			value !== null,
+			typeof candidate === "object" &&
+			candidate !== null,
 	);
 	if (!entry) return null;
 
 	const [type, payload] = entry as [string, Record<string, unknown>];
-	const { interval, sampleTime, date, ...value } = payload;
+	const { interval, sampleTime, date, ...measurement } = payload;
 
-	const summary: DataPointSummary = { type, value };
+	const summary: DataPointSummary = { type, value: measurement };
 	if (point.name) summary.name = point.name;
 
 	if (interval && typeof interval === "object") {

@@ -25,18 +25,24 @@ const paths = {
 	out: `./drizzle/${dialect}`,
 } satisfies Pick<Config, "schema" | "out">;
 
-export default defineConfig(
-	dialect === "sqlite"
-		? {
-				...paths,
-				// `turso`, not `sqlite`: it is the dialect that knows how to send an
-				// auth token and speak libSQL's HTTP protocol. It drives a local
-				// `file:` database just as well, so both SQLite deployments share one
-				// snapshot lineage instead of drifting apart.
-				dialect: "turso",
-				dbCredentials: { url, authToken },
-			}
-		: dialect === "postgresql"
-			? { ...paths, dialect: "postgresql", dbCredentials: { url } }
-			: { ...paths, dialect: "mysql", dbCredentials: { url } },
-);
+function createDialectConfig(): Config {
+	if (dialect === "sqlite") {
+		return {
+			...paths,
+			// `turso`, not `sqlite`: it is the dialect that knows how to send an
+			// auth token and speak libSQL's HTTP protocol. It drives a local
+			// `file:` database just as well, so both SQLite deployments share one
+			// snapshot lineage instead of drifting apart.
+			dialect: "turso",
+			dbCredentials: { url, authToken },
+		};
+	}
+
+	if (dialect === "postgresql") {
+		return { ...paths, dialect: "postgresql", dbCredentials: { url } };
+	}
+
+	return { ...paths, dialect: "mysql", dbCredentials: { url } };
+}
+
+export default defineConfig(createDialectConfig());

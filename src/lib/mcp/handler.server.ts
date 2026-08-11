@@ -1,7 +1,7 @@
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import { getAuthBaseUrl, isLevelEnabled } from "../env.server";
 import { createLogger } from "../logger.server";
-import { authenticateMcpRequest } from "./auth.server";
+import { authenticateMcpRequest, type McpAuthResult } from "./auth.server";
 import {
 	buildMcpWwwAuthenticate,
 	mcpAuthFailureNeedsChallenge,
@@ -84,6 +84,71 @@ async function peekRpcMethods(request: Request): Promise<string[] | undefined> {
 	}
 }
 
+type AuthenticatedMcpResult = Extract<
+	McpAuthResult,
+	{ outcome: "authenticated" }
+>;
+
+function authFailureResponse(
+	auth: Exclude<McpAuthResult, AuthenticatedMcpResult>,
+	methods: string[] | undefined,
+): Response {
+	switch (auth.outcome) {
+		case "error":
+			log.error("authentication service failed", {
+				rpc: methods ?? null,
+				code: auth.code,
+			});
+			return jsonRpcErrorResponse(
+				500,
+				INTERNAL_ERROR,
+				"Authentication service unavailable.",
+			);
+		case "anonymous":
+			log.warn("unauthorized", {
+				rpc: methods ?? null,
+				code: "MISSING_CREDENTIAL",
+			});
+			return jsonRpcErrorResponse(
+				401,
+				UNAUTHORIZED_ERROR,
+				"This MCP endpoint requires an API key or OAuth access token.",
+				{
+					...EXPOSE_AUTH_HEADER,
+					"WWW-Authenticate": buildMcpWwwAuthenticate(getAuthBaseUrl()),
+				},
+			);
+		case "rejected":
+			return rejectedCredentialResponse(auth.failure, methods);
+	}
+}
+
+function rejectedCredentialResponse(
+	failure: Extract<McpAuthResult, { outcome: "rejected" }>["failure"],
+	methods: string[] | undefined,
+): Response {
+	log.warn("unauthorized", {
+		rpc: methods ?? null,
+		code: failure.code,
+		credentialKind: failure.credentialKind,
+	});
+	const challengeHeaders = mcpAuthFailureNeedsChallenge(failure.credentialKind)
+		? {
+				...EXPOSE_AUTH_HEADER,
+				"WWW-Authenticate": buildMcpWwwAuthenticate(getAuthBaseUrl(), {
+					error: failure.error,
+					description: failure.message,
+				}),
+			}
+		: undefined;
+	return jsonRpcErrorResponse(
+		failure.status,
+		failure.status === 403 ? FORBIDDEN_ERROR : UNAUTHORIZED_ERROR,
+		failure.message,
+		challengeHeaders,
+	);
+}
+
 export async function handleMcpRequest(request: Request): Promise<Response> {
 	const startedAt = performance.now();
 	// Cloning and parsing the body costs a full extra read, so it only happens
@@ -95,58 +160,8 @@ export async function handleMcpRequest(request: Request): Promise<Response> {
 	log.debug("request", { method: request.method, rpc: methods ?? null });
 
 	const auth = await authenticateMcpRequest(request);
-
-	if (auth.outcome === "error") {
-		log.error("authentication service failed", {
-			rpc: methods ?? null,
-			code: auth.code,
-		});
-		return jsonRpcErrorResponse(
-			500,
-			INTERNAL_ERROR,
-			"Authentication service unavailable.",
-		);
-	}
-
-	if (auth.outcome === "anonymous") {
-		log.warn("unauthorized", {
-			rpc: methods ?? null,
-			code: "MISSING_CREDENTIAL",
-		});
-		return jsonRpcErrorResponse(
-			401,
-			UNAUTHORIZED_ERROR,
-			"This MCP endpoint requires an API key or OAuth access token.",
-			{
-				...EXPOSE_AUTH_HEADER,
-				"WWW-Authenticate": buildMcpWwwAuthenticate(getAuthBaseUrl()),
-			},
-		);
-	}
-
-	if (auth.outcome === "rejected") {
-		log.warn("unauthorized", {
-			rpc: methods ?? null,
-			code: auth.failure.code,
-			credentialKind: auth.failure.credentialKind,
-		});
-		const challengeHeaders = mcpAuthFailureNeedsChallenge(
-			auth.failure.credentialKind,
-		)
-			? {
-					...EXPOSE_AUTH_HEADER,
-					"WWW-Authenticate": buildMcpWwwAuthenticate(getAuthBaseUrl(), {
-						error: auth.failure.error,
-						description: auth.failure.message,
-					}),
-				}
-			: undefined;
-		return jsonRpcErrorResponse(
-			auth.failure.status,
-			auth.failure.status === 403 ? FORBIDDEN_ERROR : UNAUTHORIZED_ERROR,
-			auth.failure.message,
-			challengeHeaders,
-		);
+	if (auth.outcome !== "authenticated") {
+		return authFailureResponse(auth, methods);
 	}
 
 	const identity = auth.identity;

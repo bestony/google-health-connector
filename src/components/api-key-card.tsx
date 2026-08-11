@@ -153,13 +153,78 @@ export function ApiKeyCard({
 
 			{active && <KeyDetails summary={status.key} />}
 
+			<ApiKeyActions
+				active={active}
+				busy={busy}
+				confirming={confirming}
+				pending={pending}
+				onIssue={onIssue}
+				onRevoke={onRevoke}
+				onConfirming={setConfirming}
+			/>
+
+			{error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+
+			<ConnectSnippet connection={mcpConnection} />
+		</section>
+	);
+}
+
+function StatusBadge({ status }: { status: ApiKeyStatus }) {
+	const label = statusLabel(status);
+
+	return (
+		<span
+			className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${
+				status.status === "active"
+					? "border-primary/40 bg-accent text-accent-foreground"
+					: "border-border text-muted-foreground"
+			}`}
+		>
+			{label}
+		</span>
+	);
+}
+
+function statusLabel(status: ApiKeyStatus): string {
+	switch (status.status) {
+		case "active":
+			return "Active";
+		case "unavailable":
+			return "Status unknown";
+		default:
+			return "No key yet";
+	}
+}
+
+interface ApiKeyActionsProps {
+	active: boolean;
+	busy: boolean;
+	confirming: Exclude<Pending, "issue">;
+	pending: Pending;
+	onIssue: (action: "issue" | "regenerate") => Promise<void>;
+	onRevoke: () => Promise<void>;
+	onConfirming: (action: Exclude<Pending, "issue"> | null) => void;
+}
+
+function ApiKeyActions({
+	active,
+	busy,
+	confirming,
+	pending,
+	onIssue,
+	onRevoke,
+	onConfirming,
+}: ApiKeyActionsProps) {
+	return (
+		<>
 			<div className="mt-5 flex flex-wrap items-center gap-3">
 				{active ? (
 					<>
 						<button
 							className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
 							type="button"
-							onClick={() => setConfirming("regenerate")}
+							onClick={() => onConfirming("regenerate")}
 							disabled={busy || confirming !== null}
 						>
 							{pending === "regenerate" ? "Generating…" : "Regenerate"}
@@ -167,7 +232,7 @@ export function ApiKeyCard({
 						<button
 							className="rounded-md border border-border px-4 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:cursor-not-allowed disabled:opacity-50"
 							type="button"
-							onClick={() => setConfirming("revoke")}
+							onClick={() => onConfirming("revoke")}
 							disabled={busy || confirming !== null}
 						>
 							{pending === "revoke" ? "Revoking…" : "Revoke"}
@@ -186,58 +251,50 @@ export function ApiKeyCard({
 			</div>
 
 			{confirming !== null && (
-				<div className="mt-3 max-w-prose rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3">
-					<p className="text-sm">
-						{confirming === "regenerate"
-							? "Regenerating revokes the current key first. Every client using it stops working until you paste the new one in."
-							: "Revoking deletes the key. Every client using it stops working, and you will need to generate a new one."}
-					</p>
-					<div className="mt-3 flex flex-wrap gap-3">
-						<button
-							className="rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground transition-opacity hover:opacity-90"
-							type="button"
-							onClick={() =>
-								confirming === "regenerate" ? onIssue("regenerate") : onRevoke()
-							}
-						>
-							{confirming === "regenerate" ? "Regenerate" : "Revoke"}
-						</button>
-						<button
-							className="rounded-md border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-secondary"
-							type="button"
-							onClick={() => setConfirming(null)}
-						>
-							Cancel
-						</button>
-					</div>
-				</div>
+				<ConfirmationPrompt
+					confirming={confirming}
+					onIssue={onIssue}
+					onRevoke={onRevoke}
+					onCancel={() => onConfirming(null)}
+				/>
 			)}
-
-			{error && <p className="mt-3 text-sm text-destructive">{error}</p>}
-
-			<ConnectSnippet connection={mcpConnection} />
-		</section>
+		</>
 	);
 }
 
-function StatusBadge({ status }: { status: ApiKeyStatus }) {
-	const label =
-		status.status === "active"
-			? "Active"
-			: status.status === "unavailable"
-				? "Status unknown"
-				: "No key yet";
-
+function ConfirmationPrompt({
+	confirming,
+	onIssue,
+	onRevoke,
+	onCancel,
+}: Pick<ApiKeyActionsProps, "confirming" | "onIssue" | "onRevoke"> & {
+	onCancel: () => void;
+}) {
+	const isRegenerate = confirming === "regenerate";
 	return (
-		<span
-			className={`rounded-full border px-2.5 py-0.5 text-xs font-medium ${
-				status.status === "active"
-					? "border-primary/40 bg-accent text-accent-foreground"
-					: "border-border text-muted-foreground"
-			}`}
-		>
-			{label}
-		</span>
+		<div className="mt-3 max-w-prose rounded-md border border-destructive/40 bg-destructive/5 px-4 py-3">
+			<p className="text-sm">
+				{isRegenerate
+					? "Regenerating revokes the current key first. Every client using it stops working until you paste the new one in."
+					: "Revoking deletes the key. Every client using it stops working, and you will need to generate a new one."}
+			</p>
+			<div className="mt-3 flex flex-wrap gap-3">
+				<button
+					className="rounded-md bg-destructive px-3 py-1.5 text-sm font-medium text-destructive-foreground transition-opacity hover:opacity-90"
+					type="button"
+					onClick={() => (isRegenerate ? onIssue("regenerate") : onRevoke())}
+				>
+					{isRegenerate ? "Regenerate" : "Revoke"}
+				</button>
+				<button
+					className="rounded-md border border-border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-secondary"
+					type="button"
+					onClick={onCancel}
+				>
+					Cancel
+				</button>
+			</div>
+		</div>
 	);
 }
 

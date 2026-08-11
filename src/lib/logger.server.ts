@@ -1,4 +1,4 @@
-import { getLogLevel, isLevelEnabled, type LogLevel } from "./env.server";
+import { isLevelEnabled, type LogLevel } from "./env.server";
 
 /**
  * Minimal scoped logger for server-side code.
@@ -45,5 +45,3 @@ export function createLogger(scope: string): Logger {
 		error: (message, context) => emit(scope, "error", message, context),
 	};
 }
-
-export { getLogLevel };

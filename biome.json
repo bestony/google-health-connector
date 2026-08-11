@@ -40,7 +40,10 @@
 					"level": "warn",
 					"options": { "maxAllowedComplexity": 15 }
 				},
-				"noExcessiveLinesPerFunction": "warn",
+				"noExcessiveLinesPerFunction": {
+					"level": "warn",
+					"options": { "maxLines": 150, "skipBlankLines": true }
+				},
 				"noForEach": "error",
 				"noImplicitCoercions": "error",
 				"noUselessStringConcat": "error",
@@ -63,7 +66,10 @@
 			"nursery": {
 				"noEqualsToNull": "error",
 				"noExcessiveClassesPerFile": "error",
-				"noExcessiveLinesPerFile": "warn",
+				"noExcessiveLinesPerFile": {
+					"level": "warn",
+					"options": { "maxLines": 450, "skipBlankLines": true }
+				},
 				"noFloatingPromises": "error",
 				"noForIn": "error",
 				"noMisusedPromises": "error",

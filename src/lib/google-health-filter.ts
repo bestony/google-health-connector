@@ -150,12 +150,9 @@ export function dataPointTimeFilter(
 ): string | undefined {
 	const type = googleHealthDataType(id);
 	const field = timeField(type);
-	const render =
-		field.literal === "date"
-			? dateLiteral
-			: field.literal === "civilDateTime"
-				? civilDateTimeLiteral
-				: timestampLiteral;
+	let render = timestampLiteral;
+	if (field.literal === "date") render = dateLiteral;
+	if (field.literal === "civilDateTime") render = civilDateTimeLiteral;
 
 	if (range.to !== undefined && !field.rangeable) {
 		throw new Error(

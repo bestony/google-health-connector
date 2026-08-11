@@ -22,6 +22,9 @@ export const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
 const DEFAULT_AUTH_BASE_URL = "http://localhost:3000";
+const AUTH_IN_URL_PATTERN = /(:\/\/[^:/?#@]+):[^@]*@/;
+const AUTH_QUERY_PARAMETER_PATTERN =
+	/([?&](?:authToken|auth_token|token)=)[^&]*/gi;
 
 function read(name: string): string | undefined {
 	const value = process.env[name];
@@ -178,6 +181,6 @@ export function isLevelEnabled(level: LogLevel): boolean {
  */
 export function redactConnectionString(url: string): string {
 	return url
-		.replace(/(:\/\/[^:/?#@]+):[^@]*@/, "$1:***@")
-		.replace(/([?&](?:authToken|auth_token|token)=)[^&]*/gi, "$1***");
+		.replace(AUTH_IN_URL_PATTERN, "$1:***@")
+		.replace(AUTH_QUERY_PARAMETER_PATTERN, "$1***");
 }

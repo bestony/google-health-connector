@@ -160,10 +160,12 @@ export const issueApiKey = createServerFn({ method: "POST" }).handler(
 		const auth = getAuth();
 
 		const { apiKeys } = await auth.api.listApiKeys({ headers });
-		for (const existing of apiKeys) {
-			await auth.api.deleteApiKey({ body: { keyId: existing.id }, headers });
-			log.info("revoked api key before reissue", { keyId: existing.id });
-		}
+		await Promise.all(
+			apiKeys.map(async (existing) => {
+				await auth.api.deleteApiKey({ body: { keyId: existing.id }, headers });
+				log.info("revoked api key before reissue", { keyId: existing.id });
+			}),
+		);
 
 		// No `headers`, so the plugin treats this as a server call and takes the
 		// user from `userId`. Passing headers instead would make it a client
@@ -185,10 +187,12 @@ export const revokeApiKey = createServerFn({ method: "POST" }).handler(
 		const auth = getAuth();
 
 		const { apiKeys } = await auth.api.listApiKeys({ headers });
-		for (const existing of apiKeys) {
-			await auth.api.deleteApiKey({ body: { keyId: existing.id }, headers });
-			log.info("revoked api key", { keyId: existing.id });
-		}
+		await Promise.all(
+			apiKeys.map(async (existing) => {
+				await auth.api.deleteApiKey({ body: { keyId: existing.id }, headers });
+				log.info("revoked api key", { keyId: existing.id });
+			}),
+		);
 
 		return { revoked: apiKeys.length };
 	},

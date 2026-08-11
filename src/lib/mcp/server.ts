@@ -132,6 +132,124 @@ function describeApiError(
 	);
 }
 
+function missingScope(identity: McpIdentity, tool: string) {
+	if (mcpIdentityHasScope(identity, MCP_OAUTH_SCOPE)) return null;
+	log.warn("refused tool: missing oauth scope", {
+		tool,
+		userId: identity.userId,
+		clientId: identity.via === "oauth" ? identity.clientId : null,
+		requiredScope: MCP_OAUTH_SCOPE,
+	});
+	return text(
+		`This OAuth access token is missing the required ${MCP_OAUTH_SCOPE} scope.`,
+		true,
+	);
+}
+
+function clientFor(identity: McpIdentity) {
+	return createGoogleHealthClient({ userId: identity.userId });
+}
+
+interface ReadHealthDataInput {
+	dataType: string;
+	from?: string;
+	to?: string;
+	limit?: number;
+}
+
+type ReadRangeResult =
+	| { ok: true; from?: Date; to?: Date }
+	| { ok: false; response: ReturnType<typeof text> };
+
+function parseReadRange(
+	from: string | undefined,
+	to: string | undefined,
+): ReadRangeResult {
+	const parsedFrom = from === undefined ? undefined : new Date(from);
+	const parsedTo = to === undefined ? undefined : new Date(to);
+	for (const [label, value] of [
+		["from", parsedFrom],
+		["to", parsedTo],
+	] as const) {
+		if (value !== undefined && Number.isNaN(value.getTime())) {
+			return {
+				ok: false,
+				response: text(
+					`\`${label}\` is not a date this server can read. Use RFC 3339, e.g. 2026-08-01T00:00:00Z.`,
+					true,
+				),
+			};
+		}
+	}
+	return { ok: true, from: parsedFrom, to: parsedTo };
+}
+
+async function readHealthDataFailure(
+	error: unknown,
+	client: ReturnType<typeof clientFor>,
+	dataType: string,
+) {
+	const grantedScopes =
+		error instanceof GoogleHealthApiError
+			? await client.grantedScopes().catch(() => [])
+			: [];
+
+	log.warn("read failed", {
+		dataType,
+		status: error instanceof GoogleHealthApiError ? error.status : null,
+		error: error instanceof Error ? error.message : String(error),
+	});
+	return text(describeApiError(error, grantedScopes), true);
+}
+
+async function readHealthData(
+	identity: McpIdentity,
+	{ dataType, from, to, limit }: ReadHealthDataInput,
+) {
+	const refusal = missingScope(identity, "read_health_data");
+	if (refusal !== null) return refusal;
+	const client = clientFor(identity);
+	const parsedRange = parseReadRange(from, to);
+	if (!parsedRange.ok) return parsedRange.response;
+
+	const window = clampHistoryWindow(
+		{ from: parsedRange.from, to: parsedRange.to },
+		new Date(),
+	);
+
+	try {
+		const points = await client.collectDataPoints(
+			dataType as GoogleHealthDataTypeId,
+			{
+				from: window.from,
+				to: window.to,
+				limit: limit ?? DEFAULT_LIMIT,
+			},
+		);
+
+		log.debug("read health data", {
+			userId: identity.userId,
+			dataType,
+			points: points.length,
+			clamped: window.clamped,
+		});
+
+		return json({
+			dataType,
+			from: window.from.toISOString(),
+			to: window.to?.toISOString() ?? null,
+			count: points.length,
+			truncated: points.length >= (limit ?? DEFAULT_LIMIT),
+			historyClamped: window.clamped
+				? `Your requested start was earlier than this account's ${window.limitDays}-day history window, so it was moved forward. Older data was not searched.`
+				: undefined,
+			dataPoints: points.map(summarizeDataPoint).filter(Boolean),
+		});
+	} catch (error) {
+		return readHealthDataFailure(error, client, dataType);
+	}
+}
+
 export function createMcpServer(identity: McpIdentity): McpServer {
 	const server = new McpServer(MCP_SERVER_INFO, {
 		// This copy is returned on every initialize response. Name both supported
@@ -144,24 +262,6 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 			"use either an API key or an OAuth access token with the " +
 			`\`${MCP_OAUTH_SCOPE}\` scope. Reads reach back at most ${HISTORY_LIMIT_DAYS} days.`,
 	});
-
-	function clientFor() {
-		return createGoogleHealthClient({ userId: identity.userId });
-	}
-
-	function missingScope(tool: string) {
-		if (mcpIdentityHasScope(identity, MCP_OAUTH_SCOPE)) return null;
-		log.warn("refused tool: missing oauth scope", {
-			tool,
-			userId: identity.userId,
-			clientId: identity.via === "oauth" ? identity.clientId : null,
-			requiredScope: MCP_OAUTH_SCOPE,
-		});
-		return text(
-			`This OAuth access token is missing the required ${MCP_OAUTH_SCOPE} scope.`,
-			true,
-		);
-	}
 
 	server.registerTool(
 		"list_health_data_types",
@@ -176,7 +276,7 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 			annotations: { readOnlyHint: true, openWorldHint: false },
 		},
 		() => {
-			const refusal = missingScope("list_health_data_types");
+			const refusal = missingScope(identity, "list_health_data_types");
 			if (refusal !== null) return refusal;
 
 			return json({
@@ -225,80 +325,7 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 			// Reaches Google, so not a closed world — but it only ever reads.
 			annotations: { readOnlyHint: true, openWorldHint: true },
 		},
-		async ({ dataType, from, to, limit }) => {
-			const refusal = missingScope("read_health_data");
-			if (refusal !== null) return refusal;
-			const client = clientFor();
-
-			const parsedFrom = from === undefined ? undefined : new Date(from);
-			const parsedTo = to === undefined ? undefined : new Date(to);
-			for (const [label, value] of [
-				["from", parsedFrom],
-				["to", parsedTo],
-			] as const) {
-				if (value !== undefined && Number.isNaN(value.getTime())) {
-					return text(
-						`\`${label}\` is not a date this server can read. Use RFC 3339, e.g. 2026-08-01T00:00:00Z.`,
-						true,
-					);
-				}
-			}
-
-			const window = clampHistoryWindow(
-				{ from: parsedFrom, to: parsedTo },
-				new Date(),
-			);
-
-			try {
-				const points = await client.collectDataPoints(
-					dataType as GoogleHealthDataTypeId,
-					{
-						from: window.from,
-						to: window.to,
-						limit: limit ?? DEFAULT_LIMIT,
-					},
-				);
-
-				log.debug("read health data", {
-					userId: identity.userId,
-					dataType,
-					points: points.length,
-					clamped: window.clamped,
-				});
-
-				return json({
-					dataType,
-					from: window.from.toISOString(),
-					to: window.to?.toISOString() ?? null,
-					count: points.length,
-					truncated: points.length >= (limit ?? DEFAULT_LIMIT),
-					historyClamped: window.clamped
-						? `Your requested start was earlier than this account's ${window.limitDays}-day history window, so it was moved forward. Older data was not searched.`
-						: undefined,
-					dataPoints: points.map(summarizeDataPoint).filter(Boolean),
-				});
-			} catch (error) {
-				// An unknown data type id and the ECG upper-bound rule both arrive as
-				// plain errors from the filter builder, and both are things the caller
-				// can fix. Everything here goes back as text rather than as a protocol
-				// fault, so the model reads the reason and retries differently.
-				//
-				// Granted scopes are only worth fetching for a refusal from Google;
-				// they cost nothing when the token already resolved, but asking for
-				// them is pointless when it was the token itself that failed.
-				const grantedScopes =
-					error instanceof GoogleHealthApiError
-						? await client.grantedScopes().catch(() => [])
-						: [];
-
-				log.warn("read failed", {
-					dataType,
-					status: error instanceof GoogleHealthApiError ? error.status : null,
-					error: error instanceof Error ? error.message : String(error),
-				});
-				return text(describeApiError(error, grantedScopes), true);
-			}
-		},
+		async (input) => readHealthData(identity, input),
 	);
 
 	server.registerTool(
@@ -313,9 +340,9 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 			annotations: { readOnlyHint: true, openWorldHint: true },
 		},
 		async () => {
-			const refusal = missingScope("get_health_profile");
+			const refusal = missingScope(identity, "get_health_profile");
 			if (refusal !== null) return refusal;
-			const client = clientFor();
+			const client = clientFor(identity);
 
 			try {
 				// Settings are a separate grant from the profile, so a user may have

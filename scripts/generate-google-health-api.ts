@@ -21,6 +21,7 @@ import { writeFileSync } from "node:fs";
 const DISCOVERY_URL =
 	"https://health.googleapis.com/$discovery/rest?version=v4";
 const OUTPUT = "src/lib/google-health-api.gen.ts";
+const IDENTIFIER_PATTERN = /^[A-Za-z_$][\w$]*$/;
 
 /** Subset of the discovery document this script reads. */
 interface DiscoveryProperty {
@@ -190,7 +191,7 @@ function renderInterface(schema: DiscoverySchema): string {
 			const description = [property.description, note]
 				.filter(Boolean)
 				.join(" ");
-			const key = /^[A-Za-z_$][\w$]*$/.test(name) ? name : `"${name}"`;
+			const key = IDENTIFIER_PATTERN.test(name) ? name : `"${name}"`;
 			// Every field is optional: proto3 JSON omits defaults, so anything the
 			// user has not recorded is simply absent from the response.
 			return `${docComment(description, "\t")}\t${key}?: ${tsType(property)};`;
