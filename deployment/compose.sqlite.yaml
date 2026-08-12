@@ -11,6 +11,8 @@ services:
 
   migration:
     image: ${IMAGE_REGISTRY:-ghcr.io/bestony}/google-health-connector-migration:${IMAGE_TAG:-latest}
+    volumes:
+      - sqlite-data:/data
     environment:
       DATABASE_URL: file:/data/google-health-connector.db
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required}
