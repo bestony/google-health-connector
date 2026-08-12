@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 import { describeSignInError } from "../lib/auth-errors";
-import { createLogger } from "../lib/logger-client";
+import { createLogger } from "../lib/logger";
 import { getOneTapAuthClient } from "../lib/one-tap-client";
 
 /**
@@ -19,7 +19,7 @@ import { getOneTapAuthClient } from "../lib/one-tap-client";
  * when the user has no Google session, has dismissed it too often recently, or
  * when the browser blocks third-party sign-in. The page must therefore keep
  * offering the ordinary "Continue with Google" button; the reason only shows up
- * in the debug log (see `logger-client.ts` for turning that on in production).
+ * in the debug log (see `logger.ts` for turning that on in production).
  */
 
 const log = createLogger("auth:one-tap");

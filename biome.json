@@ -168,12 +168,17 @@
 		{
 			"includes": [
 				"**/src/lib/logger.server.ts",
-				"**/src/lib/logger-client.ts"
+				"**/src/lib/logger-client.ts",
+				"**/src/lib/logger.ts"
 			],
 			"linter": { "rules": { "suspicious": { "noConsole": "off" } } }
 		},
 		{
 			"includes": ["**/src/lib/env.server.ts"],
+			"linter": { "rules": { "style": { "noProcessEnv": "off" } } }
+		},
+		{
+			"includes": ["**/src/lib/logger.ts"],
 			"linter": { "rules": { "style": { "noProcessEnv": "off" } } }
 		},
 		{

@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { createServerFn } from "@tanstack/react-start";
 import { getGoogleOAuthConfig } from "./env.server";
-import { createLogger } from "./logger.server";
+import { createLogger } from "./logger";
 
 /**
  * Which social providers the server has credentials for.

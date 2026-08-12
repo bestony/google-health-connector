@@ -1,7 +1,7 @@
 import { oauthProviderClient } from "@better-auth/oauth-provider/client";
 import { oneTapClient } from "better-auth/client/plugins";
 import { createAuthClient } from "better-auth/react";
-import { createLogger } from "./logger-client";
+import { createLogger } from "./logger";
 
 /**
  * Google One Tap client.

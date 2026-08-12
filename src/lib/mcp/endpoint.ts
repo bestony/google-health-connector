@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { createServerFn } from "@tanstack/react-start";
 import { getAuthBaseUrl, isMcpOAuthEnabled } from "../env.server";
-import { createLogger } from "../logger.server";
+import { createLogger } from "../logger";
 import { MCP_ENDPOINT_PATH } from "./oauth-scopes";
 
 /**

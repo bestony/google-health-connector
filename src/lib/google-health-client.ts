@@ -1,7 +1,7 @@
 import { authClient } from "./auth-client";
 import { describeSignInError } from "./auth-errors";
 import { GOOGLE_HEALTH_SCOPES } from "./google-health-scopes";
-import { createLogger } from "./logger-client";
+import { createLogger } from "./logger";
 
 /**
  * Browser-side entry point for the Google Health authorization round trip.

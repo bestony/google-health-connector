@@ -2,7 +2,7 @@ import { queryOptions } from "@tanstack/react-query";
 import { createServerFn } from "@tanstack/react-start";
 import { getRequest } from "@tanstack/react-start/server";
 import { getAuth } from "./auth.server";
-import { createLogger } from "./logger.server";
+import { createLogger } from "./logger";
 import {
 	OAUTH_GRANT_TOKEN_MODELS,
 	type OAuthGrantRecord,

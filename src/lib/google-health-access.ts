@@ -4,7 +4,7 @@ import { getRequest } from "@tanstack/react-start/server";
 import { getAuth } from "./auth.server";
 import { getGoogleOAuthConfig } from "./env.server";
 import { isGoogleHealthScope } from "./google-health-scopes";
-import { createLogger } from "./logger.server";
+import { createLogger } from "./logger";
 
 /**
  * Which Google Health scopes the signed-in user has actually granted.
