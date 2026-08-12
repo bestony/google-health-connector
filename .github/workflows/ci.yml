@@ -112,6 +112,9 @@ jobs:
 
       - name: 'notify vercel'
         if: ${{ always() }}
-        uses: 'vercel/repository-dispatch/actions/status@v1'
+        # The v1 tag still targets the deprecated Node 20 action runtime. This
+        # upstream commit contains the Node 24 runtime upgrade until a new tag
+        # is published.
+        uses: 'vercel/repository-dispatch/actions/status@44f4d342ebc265c58167a2aa77d5a0d5a6eb20fd'
         with:
           name: 'Vercel - google-health-connector: lint'
