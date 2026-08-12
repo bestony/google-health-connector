@@ -1,0 +1,54 @@
+services:
+  postgresql:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: google_health_connector
+      POSTGRES_USER: google_health_connector
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}
+    volumes:
+      - postgresql-data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready --username=google_health_connector --dbname=google_health_connector
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  migration:
+    image: ${IMAGE_REGISTRY:-ghcr.io/bestony}/google-health-connector-migration:${IMAGE_TAG:-latest}
+    environment:
+      DATABASE_URL: "postgresql://google_health_connector:${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}@postgresql:5432/google_health_connector"
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL is required}
+      MCP_OAUTH_ENABLED: ${MCP_OAUTH_ENABLED:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+    depends_on:
+      postgresql:
+        condition: service_healthy
+    restart: "no"
+
+  app:
+    image: ${IMAGE_REGISTRY:-ghcr.io/bestony}/google-health-connector:${IMAGE_TAG:-latest}
+    environment:
+      DATABASE_URL: "postgresql://google_health_connector:${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}@postgresql:5432/google_health_connector"
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET:?BETTER_AUTH_SECRET is required}
+      BETTER_AUTH_URL: ${BETTER_AUTH_URL:?BETTER_AUTH_URL is required}
+      MCP_OAUTH_ENABLED: ${MCP_OAUTH_ENABLED:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      NODE_ENV: production
+      NITRO_HOST: 0.0.0.0
+      NITRO_PORT: 3000
+    ports:
+      - ${APP_PORT:-3000}:3000
+    depends_on:
+      migration:
+        condition: service_completed_successfully
+    init: true
+    restart: unless-stopped
+
+volumes:
+  postgresql-data:

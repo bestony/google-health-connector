@@ -60,6 +60,22 @@ To build this application for production:
 pnpm build
 ```
 
+## Self-hosted Docker deployment
+
+The repository publishes separate application and migration images to GitHub
+Container Registry. See [`deployment/README.md`](deployment/README.md) for the
+MySQL, PostgreSQL, and single-node SQLite Compose examples:
+
+```bash
+cp deployment/.env.example deployment/.env
+docker compose --env-file deployment/.env -f deployment/compose.postgresql.yaml up -d
+```
+
+Pin `IMAGE_TAG` to the same full `sha-<commit-sha>` value for both images in a
+production deployment. The migration service is a one-shot container and must
+complete before the application starts. `docker compose down` keeps named
+database volumes; `docker compose down -v` deletes them and all stored data.
+
 ## Database
 
 One variable decides everything. `DATABASE_URL`'s scheme selects the dialect, and the
