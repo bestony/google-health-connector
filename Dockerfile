@@ -28,7 +28,8 @@ RUN pnpm install --frozen-lockfile
 #   docker run --rm --env-file .env google-health-connector:migrate
 FROM dependencies AS migration
 
-COPY --chown=node:node . .
+COPY . .
+RUN chown -R node:node /app
 USER node
 CMD ["pnpm", "db:migrate"]
 
