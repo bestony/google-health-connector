@@ -21,6 +21,7 @@ import {
 	MCP_OAUTH_ACCEPTED_SCOPES,
 	MCP_OAUTH_SCOPE,
 	mcpOAuthAudiences,
+	mcpOAuthResources,
 	oauthIssuer,
 } from "./mcp/oauth-scopes";
 
@@ -226,6 +227,8 @@ function createAuth() {
 							loginPage: "/login",
 							consentPage: "/consent",
 							scopes: [...MCP_OAUTH_ACCEPTED_SCOPES],
+							resources: mcpOAuthResources(baseURL),
+							clientRegistrationDefaultResources: mcpOAuthResources(baseURL),
 							// AS and OIDC discovery describe every accepted scope. Protected-
 							// resource metadata has its own narrower MCP request set so profile
 							// scopes do not appear on the MCP consent screen by default.

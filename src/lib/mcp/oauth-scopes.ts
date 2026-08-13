@@ -67,6 +67,11 @@ export function mcpOAuthAudiences(baseUrl: string): string[] {
 	return [mcpResourceUri(issuer), issuer];
 }
 
+/** Resource identifiers that can be requested during dynamic client registration. */
+export function mcpOAuthResources(baseUrl: string): string[] {
+	return [mcpResourceUri(baseUrl)];
+}
+
 /** RFC 9728 metadata shared by both protected-resource discovery paths. */
 export function protectedResourceMetadata(baseUrl: string) {
 	const issuer = oauthIssuer(baseUrl);

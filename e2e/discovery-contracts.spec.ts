@@ -162,12 +162,14 @@ test.describe("@oauth OAuth-enabled discovery surface", () => {
 				client_name: "E2E public client",
 				redirect_uris: [`${profile.baseURL}/terms`],
 				token_endpoint_auth_method: "none",
+				application_type: "native",
 			},
 		});
-		expect(response.status()).toBe(200);
+		expect(response.status()).toBe(201);
 		const client = (await response.json()) as Record<string, unknown>;
 		expect(client.client_id).toEqual(expect.any(String));
-		expect(client.public).toBe(true);
+		expect(client.application_type).toBe("native");
+		expect(client.token_endpoint_auth_method).toBe("none");
 		expect(client.client_secret).toBeUndefined();
 		expect(client.scope).toContain("mcp:health:read");
 	});
