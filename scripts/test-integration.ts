@@ -106,10 +106,10 @@ async function main(): Promise<number> {
 			MCP_OAUTH_ENABLED: "false",
 			GOOGLE_CLIENT_ID: "",
 			GOOGLE_CLIENT_SECRET: "",
-			E2E_LOCAL_PORT: String(localPort),
+			E2E_BASE_PORT: String(localPort),
+			E2E_RUN_DIR: join(testDirectory, "e2e"),
 			CI: "true",
-			NODE_ENV: "test",
-			LOG_LEVEL: "error",
+			LOG_LEVEL: "debug",
 		});
 		delete environment.E2E_BASE_URL;
 		delete environment.TURSO_AUTH_TOKEN;
