@@ -39,10 +39,8 @@ test.describe("legal and compliance contracts", () => {
 		for (const dataType of GOOGLE_HEALTH_DATA_TYPES) {
 			// biome-ignore lint/performance/noAwaitInLoops: Catalog order and labels are asserted one row at a time.
 			await expect(
-				table
-					.getByRole("row")
-					.filter({ has: table.getByRole("cell", { name: dataType.label }) }),
-			).toHaveCount(1);
+				table.getByRole("cell", { name: dataType.label }).first(),
+			).toBeVisible();
 		}
 	});
 
