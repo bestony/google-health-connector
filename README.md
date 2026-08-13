@@ -11,8 +11,10 @@ pnpm dev
 
 # End-to-end tests
 
-The Playwright suite checks the home page, the Privacy Policy, the Terms of
-Service, and the anonymous dashboard redirect to the sign-in page.
+The Playwright suite covers the public shell and legal pages, email
+authentication, API-key lifecycle and isolation, MCP transport and tool
+contracts, OAuth discovery and authorization, and the Google Health dashboard
+states described in `e2e.md`.
 
 Install the Chromium test browser once:
 
@@ -26,8 +28,15 @@ Run the suite against a local development server:
 pnpm test:e2e
 ```
 
-Playwright starts the local server at `http://127.0.0.1:3000` when it is not
-already running. Run the same cases against `https://www.stillwarm.app` with:
+Playwright starts three isolated local servers by default:
+
+- `local-dev`: `http://127.0.0.1:3200`, Google credentials configured, MCP OAuth disabled
+- `local-oauth`: `http://127.0.0.1:3201`, MCP OAuth enabled
+- `local-nogoogle`: `http://127.0.0.1:3202`, Google credentials absent
+
+Each profile uses its own temporary SQLite database. Override the port range
+with `E2E_BASE_PORT` or the database directory with `E2E_RUN_DIR`. Run the
+production-tagged smoke cases against `https://www.stillwarm.app` with:
 
 ```bash
 pnpm test:e2e:production
