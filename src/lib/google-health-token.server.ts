@@ -66,16 +66,31 @@ export class GoogleHealthAuthorizationError extends Error {
 	}
 }
 
-function resolveAccessToken(userId: string | undefined) {
-	if (userId === undefined) {
-		return getAuth().api.getAccessToken({
-			body: { providerId: GOOGLE_PROVIDER_ID },
-			headers: getRequest().headers,
-		});
+async function resolveAccessToken(userId: string | undefined) {
+	const auth = getAuth();
+	const account =
+		userId === undefined
+			? (
+					await auth.api.listUserAccounts({
+						headers: getRequest().headers,
+					})
+				).find(
+					(linkedAccount) => linkedAccount.providerId === GOOGLE_PROVIDER_ID,
+				)
+			: (await (await auth.$context).internalAdapter.findAccounts(userId)).find(
+					(linkedAccount) => linkedAccount.providerId === GOOGLE_PROVIDER_ID,
+				);
+
+	if (account === undefined) {
+		throw new Error("No Google account is linked to this user");
 	}
 
-	return getAuth().api.getAccessToken({
-		body: { providerId: GOOGLE_PROVIDER_ID, userId },
+	return auth.api.getAccessToken({
+		body: {
+			accountId: account.id,
+			...(userId !== undefined ? { userId } : {}),
+		},
+		...(userId === undefined ? { headers: getRequest().headers } : {}),
 	});
 }
 

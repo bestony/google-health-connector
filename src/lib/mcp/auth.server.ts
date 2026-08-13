@@ -1,4 +1,4 @@
-import { verifyAccessToken } from "better-auth/oauth2";
+import { verifyBearerToken } from "better-auth/oauth2";
 import { getAuth } from "../auth.server";
 import { getAuthBaseUrl, isMcpOAuthEnabled } from "../env.server";
 import { createLogger } from "../logger.server";
@@ -35,7 +35,7 @@ export type McpAuthResult =
 
 export type { McpIdentity } from "./credential";
 
-type AccessTokenClaims = Awaited<ReturnType<typeof verifyAccessToken>>;
+type AccessTokenClaims = Awaited<ReturnType<typeof verifyBearerToken>>;
 
 const log = createLogger("mcp:auth");
 const SCOPE_SEPARATOR = /\s+/;
@@ -115,7 +115,7 @@ async function verifyOAuthClaims(
 	try {
 		return {
 			outcome: "verified",
-			claims: await verifyAccessToken(token, {
+			claims: await verifyBearerToken(token, {
 				jwksUrl: oauthJwksUrl(baseUrl),
 				verifyOptions: {
 					issuer: expectedIssuer,

@@ -8,9 +8,11 @@ import { readFile, writeFile } from "node:fs/promises";
  * so one generated dialect would otherwise make the next dialect fail while it
  * imports the shared schema index. It also emits SQLite's `{ mode: "json" }`
  * option on MySQL `text()` and `json()` columns, where drizzle-orm rejects it,
- * and narrows OAuth `client_id` references to `varchar(36)` even though their
- * unique parent column is `varchar(255)`. Keep this post-processing beside the
- * generation command so all three dialects always receive the same treatment.
+ * and narrows OAuth `client_id` and `resource_id` references below their
+ * `varchar(255)` unique parent columns. MySQL also cannot use an array literal
+ * as the default for a text column, so that generated default is removed.
+ * Keep this post-processing beside the generation command so all three dialects
+ * always receive the same treatment.
  */
 
 const DIALECT_CONFIG = {
@@ -73,9 +75,13 @@ type Dialect = keyof typeof DIALECT_CONFIG;
 const DRIZZLE_IMPORT = /^import \{ ([^}]+) \} from "drizzle-orm";\n?/m;
 const RELATIONS_START = /\nexport const \w+Relations = relations\(/;
 const MYSQL_UNSUPPORTED_JSON_MODE =
-	/\b(text|json)\(([^,\n]+), \{ mode: "json" \}\)/g;
+	/\b(text|json)\(\s*("[^"]+")\s*,\s*\{\s*mode: "json"\s*,?\s*\}\s*\)/gs;
 const MYSQL_NARROW_OAUTH_CLIENT_ID =
-	/clientId: varchar\("client_id", \{ length: 36 \}\)/g;
+	/clientId: varchar\("client_id", \{ length: (?:36|191) \}\)/g;
+const MYSQL_NARROW_OAUTH_RESOURCE_ID =
+	/resourceId: varchar\("resource_id", \{ length: (?:36|191) \}\)/g;
+const MYSQL_UNSUPPORTED_TEXT_ARRAY_DEFAULT =
+	/clientCredentialsScopes: text\("client_credentials_scopes"\)\.default\(\[\]\)/g;
 
 function isDialect(value: string | undefined): value is Dialect {
 	return value !== undefined && value in DIALECT_CONFIG;
@@ -116,6 +122,14 @@ function normalize(source: string, header: string, dialect: Dialect): string {
 					.replace(
 						MYSQL_NARROW_OAUTH_CLIENT_ID,
 						'clientId: varchar("client_id", { length: 255 })',
+					)
+					.replace(
+						MYSQL_NARROW_OAUTH_RESOURCE_ID,
+						'resourceId: varchar("resource_id", { length: 255 })',
+					)
+					.replace(
+						MYSQL_UNSUPPORTED_TEXT_ARRAY_DEFAULT,
+						'clientCredentialsScopes: text("client_credentials_scopes")',
 					)
 			: rawTables;
 	const output = `${imports}\n\n${header}\n\n${tables}\n`;

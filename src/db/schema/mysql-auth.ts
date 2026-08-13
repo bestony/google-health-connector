@@ -7,6 +7,7 @@ import {
 	mysqlTable,
 	text,
 	timestamp,
+	uniqueIndex,
 	varchar,
 } from "drizzle-orm/mysql-core";
 
@@ -65,7 +66,8 @@ export const account = mysqlTable(
 	"account",
 	{
 		id: varchar("id", { length: 36 }).primaryKey(),
-		accountId: text("account_id").notNull(),
+		issuer: varchar("issuer", { length: 191 }).notNull(),
+		accountId: varchar("account_id", { length: 191 }).notNull(),
 		providerId: text("provider_id").notNull(),
 		userId: varchar("user_id", { length: 36 })
 			.notNull()
@@ -82,7 +84,13 @@ export const account = mysqlTable(
 			.$onUpdate(() => /* @__PURE__ */ new Date())
 			.notNull(),
 	},
-	(table) => [index("account_userId_idx").on(table.userId)],
+	(table) => [
+		uniqueIndex("account_issuer_accountId_uidx").on(
+			table.issuer,
+			table.accountId,
+		),
+		index("account_userId_idx").on(table.userId),
+	],
 );
 
 export const verification = mysqlTable(
@@ -142,6 +150,8 @@ export const jwks = mysqlTable("jwks", {
 	privateKey: text("private_key").notNull(),
 	createdAt: timestamp("created_at", { fsp: 3 }).notNull(),
 	expiresAt: timestamp("expires_at", { fsp: 3 }),
+	alg: text("alg"),
+	crv: text("crv"),
 });
 
 export const oauthClient = mysqlTable(
@@ -150,11 +160,13 @@ export const oauthClient = mysqlTable(
 		id: varchar("id", { length: 36 }).primaryKey(),
 		clientId: varchar("client_id", { length: 255 }).notNull().unique(),
 		clientSecret: text("client_secret"),
+		clientDiscoveryId: text("client_discovery_id"),
 		disabled: boolean("disabled").default(false),
 		skipConsent: boolean("skip_consent"),
 		enableEndSession: boolean("enable_end_session"),
 		subjectType: text("subject_type"),
 		scopes: text("scopes"),
+		clientCredentialsScopes: text("client_credentials_scopes"),
 		userId: varchar("user_id", { length: 36 }).references(() => user.id, {
 			onDelete: "cascade",
 		}),
@@ -171,16 +183,65 @@ export const oauthClient = mysqlTable(
 		softwareStatement: text("software_statement"),
 		redirectUris: text("redirect_uris").notNull(),
 		postLogoutRedirectUris: text("post_logout_redirect_uris"),
+		backchannelLogoutUri: text("backchannel_logout_uri"),
+		backchannelLogoutSessionRequired: boolean(
+			"backchannel_logout_session_required",
+		),
 		tokenEndpointAuthMethod: text("token_endpoint_auth_method"),
+		applicationType: text("application_type"),
+		jwks: text("jwks"),
+		jwksUri: text("jwks_uri"),
 		grantTypes: text("grant_types"),
 		responseTypes: text("response_types"),
-		public: boolean("public"),
-		type: text("type"),
 		requirePKCE: boolean("require_pkce"),
+		dpopBoundAccessTokens: boolean("dpop_bound_access_tokens").default(false),
 		referenceId: text("reference_id"),
 		metadata: json("metadata"),
 	},
 	(table) => [index("oauthClient_userId_idx").on(table.userId)],
+);
+
+export const oauthResource = mysqlTable("oauth_resource", {
+	id: varchar("id", { length: 36 }).primaryKey(),
+	identifier: varchar("identifier", { length: 255 }).notNull().unique(),
+	name: text("name").notNull(),
+	accessTokenTtl: int("access_token_ttl"),
+	refreshTokenTtl: int("refresh_token_ttl"),
+	signingAlgorithm: text("signing_algorithm"),
+	signingKeyId: text("signing_key_id"),
+	allowedScopes: text("allowed_scopes"),
+	customClaims: json("custom_claims"),
+	dpopBoundAccessTokensRequired: boolean(
+		"dpop_bound_access_tokens_required",
+	).default(false),
+	disabled: boolean("disabled").default(false),
+	createdAt: timestamp("created_at", { fsp: 3 }),
+	updatedAt: timestamp("updated_at", { fsp: 3 }),
+	policyVersion: int("policy_version").default(1),
+	metadata: json("metadata"),
+});
+
+export const oauthClientResource = mysqlTable(
+	"oauth_client_resource",
+	{
+		id: varchar("id", { length: 36 }).primaryKey(),
+		clientId: varchar("client_id", { length: 255 })
+			.notNull()
+			.references(() => oauthClient.clientId, { onDelete: "cascade" }),
+		resourceId: varchar("resource_id", { length: 255 })
+			.notNull()
+			.references(() => oauthResource.identifier, { onDelete: "cascade" }),
+		metadata: json("metadata"),
+		createdAt: timestamp("created_at", { fsp: 3 }),
+	},
+	(table) => [
+		uniqueIndex("oauthClientResource_clientId_resourceId_uidx").on(
+			table.clientId,
+			table.resourceId,
+		),
+		index("oauthClientResource_clientId_idx").on(table.clientId),
+		index("oauthClientResource_resourceId_idx").on(table.resourceId),
+	],
 );
 
 export const oauthRefreshToken = mysqlTable(
@@ -199,16 +260,28 @@ export const oauthRefreshToken = mysqlTable(
 			.notNull()
 			.references(() => user.id, { onDelete: "cascade" }),
 		referenceId: text("reference_id"),
+		authorizationCodeId: varchar("authorization_code_id", { length: 255 }),
+		resources: text("resources"),
+		requestedUserInfoClaims: text("requested_user_info_claims"),
 		expiresAt: timestamp("expires_at", { fsp: 3 }).notNull(),
 		createdAt: timestamp("created_at", { fsp: 3 }).notNull(),
 		revoked: timestamp("revoked", { fsp: 3 }),
+		rotatedAt: timestamp("rotated_at", { fsp: 3 }),
+		rotationReplayResponse: text("rotation_replay_response"),
+		rotationReplayExpiresAt: timestamp("rotation_replay_expires_at", {
+			fsp: 3,
+		}),
 		authTime: timestamp("auth_time", { fsp: 3 }),
+		confirmation: json("confirmation"),
 		scopes: text("scopes").notNull(),
 	},
 	(table) => [
 		index("oauthRefreshToken_clientId_idx").on(table.clientId),
 		index("oauthRefreshToken_sessionId_idx").on(table.sessionId),
 		index("oauthRefreshToken_userId_idx").on(table.userId),
+		index("oauthRefreshToken_authorizationCodeId_idx").on(
+			table.authorizationCodeId,
+		),
 	],
 );
 
@@ -228,18 +301,26 @@ export const oauthAccessToken = mysqlTable(
 			onDelete: "cascade",
 		}),
 		referenceId: text("reference_id"),
+		authorizationCodeId: varchar("authorization_code_id", { length: 255 }),
+		resources: text("resources"),
+		requestedUserInfoClaims: text("requested_user_info_claims"),
 		refreshId: varchar("refresh_id", { length: 36 }).references(
 			() => oauthRefreshToken.id,
 			{ onDelete: "cascade" },
 		),
 		expiresAt: timestamp("expires_at", { fsp: 3 }).notNull(),
 		createdAt: timestamp("created_at", { fsp: 3 }).notNull(),
+		revoked: timestamp("revoked", { fsp: 3 }),
+		confirmation: json("confirmation"),
 		scopes: text("scopes").notNull(),
 	},
 	(table) => [
 		index("oauthAccessToken_clientId_idx").on(table.clientId),
 		index("oauthAccessToken_sessionId_idx").on(table.sessionId),
 		index("oauthAccessToken_userId_idx").on(table.userId),
+		index("oauthAccessToken_authorizationCodeId_idx").on(
+			table.authorizationCodeId,
+		),
 		index("oauthAccessToken_refreshId_idx").on(table.refreshId),
 	],
 );
@@ -255,6 +336,8 @@ export const oauthConsent = mysqlTable(
 			onDelete: "cascade",
 		}),
 		referenceId: text("reference_id"),
+		resources: text("resources"),
+		requestedUserInfoClaims: text("requested_user_info_claims"),
 		scopes: text("scopes").notNull(),
 		createdAt: timestamp("created_at", { fsp: 3 }).notNull(),
 		updatedAt: timestamp("updated_at", { fsp: 3 }).notNull(),
@@ -264,6 +347,11 @@ export const oauthConsent = mysqlTable(
 		index("oauthConsent_userId_idx").on(table.userId),
 	],
 );
+
+export const oauthClientAssertion = mysqlTable("oauth_client_assertion", {
+	id: varchar("id", { length: 36 }).primaryKey(),
+	expiresAt: timestamp("expires_at", { fsp: 3 }).notNull(),
+});
 
 export const rateLimit = mysqlTable("rate_limit", {
 	id: varchar("id", { length: 36 }).primaryKey(),

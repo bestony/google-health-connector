@@ -54,7 +54,7 @@ export interface ConsentScopeCopy {
 }
 
 /**
- * Parameters declared by oauth-provider 1.6.26's authorization schema and
+ * Parameters declared by oauth-provider 1.7.0-rc.5's authorization schema and
  * signed-query handoff. `ba_pl` is conditional on a post-login page, which this
  * app does not configure, but preserving it keeps this parser aligned with the
  * installed signer.
