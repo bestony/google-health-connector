@@ -207,7 +207,10 @@ without a challenge. A valid API key is an owner credential, while an OAuth
 identity carries only its granted scopes. Never demote a malformed `Authorization`
 header to anonymous. OAuth JWT verification is local, then one indexed consent
 read keeps explicit revocation immediate; browser-session expiry does not revoke
-the grant. Tool handlers repeat the scope check in-band so a directly constructed
+the grant. That per-request consent read is what makes `MCP_OAUTH_TOKEN_LIFETIME`'s
+thirty-day access token affordable — MCP clients that never refresh would otherwise
+lose the connection hourly. Keep the two lifetimes equal, and never drop the
+liveness read to save a query. Tool handlers repeat the scope check in-band so a directly constructed
 server still cannot reach Google without permission.
 
 ### Legal pages are a compliance surface, not decoration

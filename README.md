@@ -759,6 +759,22 @@ Therefore `prompt=select_account` fails with `unsupported_prompt_select_account`
 `127.0.0.0/8` and `::1`, but a LAN test URL such as `http://192.168.1.10:3000` produces an
 issuer mismatch and is not a supported test deployment.
 
+**A grant lasts thirty days without a browser.** `MCP_OAUTH_TOKEN_LIFETIME` in
+`src/lib/mcp/oauth-scopes.ts` pins the access token *and* the refresh token to thirty days,
+against provider defaults of one hour and thirty days. The one-hour default assumes the
+client runs the refresh-token grant correctly and promptly, and several hosted MCP clients
+do neither — the connection then dies within the hour and the user is sent back through
+`/consent`. Matching the two lifetimes means a client that never refreshes still works for
+thirty days, while a client that does refresh restarts the window on every rotation.
+`refreshTokenReuseInterval` is 60 seconds so that two concurrent refreshes are replayed as
+one response instead of tripping single-use rotation and invalidating the whole family.
+
+That access token is only affordable because `/mcp` does not treat the signature as the
+whole answer: the consent read below runs on every request, so revocation stays immediate
+regardless of how long the JWT claims to live. The token also carries one audience
+(`<origin>/mcp`) and one coarse read scope, so a leaked token reaches read-only health data
+the user can cut off at once. Shortening it is a one-line change in that constant.
+
 JWT signature verification uses `/api/auth/jwks`, then one database read confirms that the
 `(user, client)` consent still exists and still covers `mcp:health:read`. Signing out does
 not revoke the grant or cap it at the seven-day browser session lifetime. Connected apps

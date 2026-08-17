@@ -23,6 +23,7 @@ import {
 	MCP_OAUTH_ACCEPTED_SCOPES,
 	MCP_OAUTH_RESOURCE_SCOPES,
 	MCP_OAUTH_SCOPE,
+	MCP_OAUTH_TOKEN_LIFETIME,
 	mcpOAuthAudiences,
 	mcpResourceUri,
 	oauthIssuer,
@@ -123,6 +124,22 @@ describe("shared product facts", () => {
 			metadata.resource,
 		);
 		expect(metadata.resource).toBe(mcpResourceUri("https://health.example"));
+	});
+
+	it("gives an MCP OAuth grant thirty days without a browser", () => {
+		const thirtyDays = 60 * 60 * 24 * 30;
+		expect(MCP_OAUTH_TOKEN_LIFETIME.accessTokenSeconds).toBe(thirtyDays);
+		expect(MCP_OAUTH_TOKEN_LIFETIME.refreshTokenSeconds).toBe(thirtyDays);
+		// A client that never refreshes must not run out before its refresh token
+		// does, or the thirty days would only apply to well-behaved clients.
+		expect(MCP_OAUTH_TOKEN_LIFETIME.accessTokenSeconds).toBeLessThanOrEqual(
+			MCP_OAUTH_TOKEN_LIFETIME.refreshTokenSeconds,
+		);
+		// A grace window, not a second lifetime: it only replays one rotation.
+		expect(MCP_OAUTH_TOKEN_LIFETIME.refreshTokenReuseSeconds).toBe(60);
+		expect(
+			MCP_OAUTH_TOKEN_LIFETIME.refreshTokenReuseSeconds,
+		).toBeLessThanOrEqual(300);
 	});
 
 	it("keeps pricing and plan claims internally consistent", () => {

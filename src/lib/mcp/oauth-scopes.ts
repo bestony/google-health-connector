@@ -36,6 +36,42 @@ export const MCP_OAUTH_RESOURCE_SCOPES = [
 	"offline_access",
 ] as const;
 
+const SECONDS_PER_DAY = 60 * 60 * 24;
+
+/**
+ * How long an MCP OAuth grant survives without the user returning to a browser.
+ *
+ * MCP clients are the reason these are not the provider's defaults. A one-hour
+ * access token assumes the client runs the refresh-token grant correctly and
+ * promptly; several hosted MCP clients do neither, so the connection dies within
+ * the hour and the user is sent back through `/consent`. Both token lifetimes
+ * are therefore pinned to the same thirty days: a client that never refreshes
+ * still works for thirty days, and a client that does refresh restarts the
+ * window on every rotation.
+ *
+ * The long access token is affordable here only because `/mcp` does not treat
+ * the JWT signature as the whole answer. Every request re-reads the
+ * `(user, client)` consent row, so revoking a connection is still immediate —
+ * see `oauthConsentIsLive` in `auth.server.ts`. The token also carries exactly
+ * one audience (`<origin>/mcp`) and one coarse read scope, so the blast radius
+ * of a leaked token is read-only health data the user can cut off at once.
+ *
+ * `refreshTokenReuseSeconds` is what makes the thirty days hold for clients that
+ * fire concurrent requests: refresh-token rotation is single-use, so two
+ * in-flight refreshes would otherwise look like replay and invalidate the whole
+ * family. Inside the window the provider replays the *same* token response for
+ * an identical request instead of minting a new one, which is the OAuth 2.1
+ * grace period rather than a hole in replay detection.
+ */
+export const MCP_OAUTH_TOKEN_LIFETIME = {
+	/** Seconds a JWT access token stays valid. */
+	accessTokenSeconds: 30 * SECONDS_PER_DAY,
+	/** Seconds a refresh token stays valid. Restarted on every rotation. */
+	refreshTokenSeconds: 30 * SECONDS_PER_DAY,
+	/** Seconds a rotated refresh token may be replayed for the same response. */
+	refreshTokenReuseSeconds: 60,
+} as const;
+
 const AUTH_BASE_PATH = "/api/auth";
 
 const TRAILING_SLASHES = /\/+$/;

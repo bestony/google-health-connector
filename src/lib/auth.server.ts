@@ -20,6 +20,7 @@ import { createLogger } from "./logger.server";
 import {
 	MCP_OAUTH_ACCEPTED_SCOPES,
 	MCP_OAUTH_SCOPE,
+	MCP_OAUTH_TOKEN_LIFETIME,
 	mcpOAuthAudiences,
 	oauthIssuer,
 } from "./mcp/oauth-scopes";
@@ -238,6 +239,15 @@ function createAuth() {
 							// unique access-token and refresh-token columns, so storing raw
 							// tokens here would make truncation a dialect-only production bug.
 							storeTokens: "hashed",
+							// A thirty-day grant, deliberately longer than the provider's
+							// one-hour access token default. MCP clients that never run the
+							// refresh-token grant are what force this; the rationale and the
+							// reason it stays revocable live with the constant.
+							accessTokenExpiresIn: MCP_OAUTH_TOKEN_LIFETIME.accessTokenSeconds,
+							refreshTokenExpiresIn:
+								MCP_OAUTH_TOKEN_LIFETIME.refreshTokenSeconds,
+							refreshTokenReuseInterval:
+								MCP_OAUTH_TOKEN_LIFETIME.refreshTokenReuseSeconds,
 							allowDynamicClientRegistration: true,
 							allowUnauthenticatedClientRegistration: true,
 							clientRegistrationDefaultScopes: [
