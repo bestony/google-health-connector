@@ -9,10 +9,11 @@ account into an MCP endpoint: sign in, grant health scopes, then approve an OAut
 application or issue an API key for `POST /mcp`. Health data is read live from
 Google — no copy is stored server-side.
 
-`README.md` is unusually detailed and is the source of truth for behaviour and
-rationale; the sections on Database, Authentication, Google Health authorization,
-The API client, Legal pages, API keys and MCP server are worth reading before
-changing those areas.
+`development.md` is the source of truth for behaviour and rationale; the
+sections on Database, Authentication, Google Health authorization, The API
+client, Legal pages, API keys and MCP server are worth reading before changing
+those areas. `README.md` is the product overview. Deploy guides live in
+`deployment/`.
 
 ## Commands
 
@@ -45,7 +46,7 @@ pnpm generate-routes        # rewrites src/routeTree.gen.ts (the dev server also
 
 `pnpm db:generate` writes only the folder for the dialect `DATABASE_URL` currently
 names, so generating for all three means running it three times with the variable
-overridden per run (see README → Migrations).
+overridden per run (see development.md → Migrations).
 
 ### Testing and quality gates
 
@@ -55,7 +56,7 @@ coverage for the hand-written domain and transport-boundary modules listed in
 `vitest.config.ts`. Generated Google schema code and server adapters remain
 integration/build-test scope. Verify changes with `pnpm test:coverage`,
 `npx tsc --noEmit`, `pnpm check`, and by exercising the app (`pnpm dev`, or
-`curl` against `/mcp` — README → MCP server has a working example).
+`curl` against `/mcp` — development.md → MCP server has a working example).
 
 `biome.json` enables a strict ruleset on top of `recommended`. Rules the codebase
 already satisfied are pinned at `error`; pre-existing debt (nested ternaries, long
@@ -102,7 +103,7 @@ libSQL sends its token as a bearer header rather than in the URL.
 - `src/server.ts` — the *server entry*, not a `.server.ts` module. It is the framework's
   own `createStartHandler(defaultStreamHandler)` plus one correction: the SSR handler
   answers **500** to any request whose `Accept` is neither `text/html` nor the wildcard,
-  and `html-only-refusal.server.ts` turns that into a `404` (README → MCP server). Wrap
+  and `html-only-refusal.server.ts` turns that into a `404` (development.md → MCP server). Wrap
   here rather than in a `src/start.ts` — creating a Start instance replaces the CSRF
   request middleware the framework otherwise installs by default.
 - `*.gen.ts` / `<dialect>-auth.ts` / `routeTree.gen.ts` — generated. Regenerate, never edit.
@@ -240,7 +241,7 @@ Use disclosure, and never bypass per-application consent. Cross-references use
   makes Google tokens and stored JWK private keys undecryptable, and breaks MCP
   client authorization. Treat it as immutable. A forced rotation requires deleting
   `jwks` rows and restarting every serving process to clear the 300-second verifier
-  cache; follow the complete outage procedure in README.md.
+  cache; follow the complete outage procedure in development.md.
 - `AGENTS.md` is a generated index of TanStack "intent" guidance packs. When working
   on unfamiliar TanStack Router/Start surface, load the matching pack with the
   `pnpm dlx @tanstack/intent@latest load …` command listed there.

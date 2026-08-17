@@ -1,7 +1,21 @@
-# Self-hosted deployment
+# Deployment
 
-This directory contains three independent Docker Compose examples for Google
-Health Connector. Choose one database for each deployment:
+This directory covers every supported way to run GHealth Connector.
+
+| Path | When to use | Document |
+| ---- | ----------- | -------- |
+| Docker Compose | Self-host with SQLite, PostgreSQL, or MySQL | this file |
+| Vercel + Turso | Serverless on Vercel | [`vercel.md`](vercel.md) |
+| Nitro / standalone Docker | A Node host, or one image without Compose | [`nitro.md`](nitro.md) |
+
+Local setup, database dialects, authentication, and the MCP server are in
+[`../development.md`](../development.md). The product overview is in
+[`../README.md`](../README.md).
+
+## Self-hosted Docker Compose
+
+This directory contains three independent Docker Compose examples. Choose one
+database for each deployment:
 
 | File | Database | Deployment shape |
 | --- | --- | --- |
@@ -145,7 +159,9 @@ The Google OAuth client must use the same public origin as `BETTER_AUTH_URL`:
 For example, if `BETTER_AUTH_URL=https://health.example.com`, register
 `https://health.example.com/api/auth/callback/google` and
 `https://health.example.com`. Local development uses
-`http://localhost:3000` and its matching callback.
+`http://localhost:3000` and its matching callback. The full local Google
+sign-in steps are in
+[`../development.md#google-sign-in`](../development.md#google-sign-in).
 
 Keep `MCP_OAUTH_ENABLED=false` until the OAuth schema, discovery routes, and
 client configuration are ready. Set `GOOGLE_CLIENT_ID` and
