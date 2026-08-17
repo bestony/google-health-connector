@@ -24,7 +24,7 @@ import {
 	MCP_OAUTH_RESOURCE_SCOPES,
 	MCP_OAUTH_SCOPE,
 	MCP_OAUTH_TOKEN_LIFETIME,
-	mcpOAuthAudiences,
+	mcpOAuthResources,
 	mcpResourceUri,
 	oauthIssuer,
 	oauthJwksUrl,
@@ -108,9 +108,10 @@ describe("shared product facts", () => {
 		expect(mcpResourceUri("https://health.example///")).toBe(
 			"https://health.example/mcp",
 		);
-		expect(mcpOAuthAudiences("https://health.example/")).toEqual([
+		// The registry holds the endpoint URI only. Adding the bare origin would
+		// let a client obtain a token whose `aud` /mcp then refuses.
+		expect(mcpOAuthResources("https://health.example/")).toEqual([
 			"https://health.example/mcp",
-			"https://health.example",
 		]);
 
 		const metadata = protectedResourceMetadata("https://health.example/");
@@ -120,7 +121,7 @@ describe("shared product facts", () => {
 			scopes_supported: [MCP_OAUTH_SCOPE, "offline_access"],
 			bearer_methods_supported: ["header"],
 		});
-		expect(mcpOAuthAudiences("https://health.example")).toContain(
+		expect(mcpOAuthResources("https://health.example")).toContain(
 			metadata.resource,
 		);
 		expect(metadata.resource).toBe(mcpResourceUri("https://health.example"));

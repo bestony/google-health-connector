@@ -714,9 +714,28 @@ authorization endpoints remain under `<origin>/api/auth/oauth2/*`.
 **`resource` decides the token format.** The token endpoint emits a JWT access token only
 when the request includes `resource=<origin>/mcp`. Without it, the provider emits an opaque
 token. `/mcp` verifies JWTs locally, so it rejects the opaque value with an error that names
-the missing token-endpoint parameter. `validAudiences` explicitly includes `<origin>/mcp`
-and `<origin>` instead of the provider default, `<origin>/api/auth`. The protected-resource
-document advertises `<origin>/mcp`, and the resource server requires that exact audience.
+the missing token-endpoint parameter. The protected-resource document advertises
+`<origin>/mcp`, and the resource server requires that exact audience.
+
+**`resources` is a closed registry, and it is load-bearing.** OAuth provider 1.7 replaced the
+old `validAudiences` option with a resource registry: any request naming a `resource` that is
+not registered is refused with `invalid_target` *before the consent screen renders*, and MCP
+clients always send `resource`. `mcpOAuthResources()` therefore registers `<origin>/mcp`, and
+`oauthProvider` seeds it into the `oauth_resource` table during plugin `init`. Dropping that
+option does not relax a check — it breaks authorization outright. `validAudiences` is
+silently ignored by the current package rather than rejected, so it must not come back as a
+second source of truth.
+
+The registry holds the endpoint URI alone. RFC 8707 would permit the bare origin too, but the
+resource server compares `aud` against `<origin>/mcp` exactly, so registering the origin form
+would only mint tokens that `/mcp` then refuses. Failing at authorize is earlier and louder.
+
+Because the seed runs at `init`, **migrations must be applied before new code serves traffic**.
+It is also why unit tests that call a provider endpoint use a migrated SQLite fixture
+(`src/test-support/migrated-sqlite.ts`) instead of `:memory:`: the provider tolerates a
+missing table by deferring the seed, but it recognises that case by matching the driver's
+`no such table` against `error.message`, and drizzle-orm 1.x wraps driver errors in a
+`DrizzleQueryError` whose message is the failed SQL. The tolerance never matches here.
 
 **One coarse scope is deliberate.** `mcp:health:read` permits the MCP tools to read the
 Google Health categories this user has already granted to this Service. It does not expand

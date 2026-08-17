@@ -4,6 +4,10 @@ import {
 } from "@better-auth/oauth-provider";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+	createMigratedSqlite,
+	type MigratedSqlite,
+} from "../../test-support/migrated-sqlite";
+import {
 	OAUTH_METADATA_CORS_HEADERS,
 	oauthMetadataHeadResponse,
 	oauthMetadataOptionsResponse,
@@ -12,7 +16,15 @@ import {
 } from "./oauth-metadata";
 import { MCP_OAUTH_ACCEPTED_SCOPES, MCP_OAUTH_SCOPE } from "./oauth-scopes";
 
-afterEach(() => {
+let database: MigratedSqlite | undefined;
+
+afterEach(async () => {
+	// The auth instance memoizes a database handle; drop it before the directory
+	// goes away so the next test does not reuse a client pointed at a dead file.
+	const { resetDb } = await import("../../db/client.server");
+	await resetDb();
+	database?.cleanup();
+	database = undefined;
 	vi.unstubAllEnvs();
 	vi.resetModules();
 });
@@ -32,7 +44,10 @@ describe("OAuth metadata responses", () => {
 	});
 
 	it("keeps protected-resource and authorization-server scope sets distinct", async () => {
-		vi.stubEnv("DATABASE_URL", ":memory:");
+		// A migrated database, not `:memory:`: this test drives real provider
+		// endpoints, and plugin init seeds the OAuth resource registry.
+		database = await createMigratedSqlite();
+		vi.stubEnv("DATABASE_URL", database.url);
 		vi.stubEnv(
 			"BETTER_AUTH_SECRET",
 			"test-secret-at-least-thirty-two-characters",

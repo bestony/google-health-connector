@@ -21,7 +21,7 @@ import {
 	MCP_OAUTH_ACCEPTED_SCOPES,
 	MCP_OAUTH_SCOPE,
 	MCP_OAUTH_TOKEN_LIFETIME,
-	mcpOAuthAudiences,
+	mcpOAuthResources,
 	oauthIssuer,
 } from "./mcp/oauth-scopes";
 
@@ -227,6 +227,13 @@ function createAuth() {
 							loginPage: "/login",
 							consentPage: "/consent",
 							scopes: [...MCP_OAUTH_ACCEPTED_SCOPES],
+							// `resources` is a closed registry, not documentation: without
+							// `<origin>/mcp` in it the provider refuses the authorization
+							// request with `invalid_target` before consent renders, and MCP
+							// clients always send `resource`. Registering it here is also what
+							// makes the token endpoint emit a JWT rather than an opaque token.
+							resources: mcpOAuthResources(baseURL),
+							clientRegistrationDefaultResources: mcpOAuthResources(baseURL),
 							// AS and OIDC discovery describe every accepted scope. Protected-
 							// resource metadata has its own narrower MCP request set so profile
 							// scopes do not appear on the MCP consent screen by default.
@@ -255,7 +262,6 @@ function createAuth() {
 								"offline_access",
 								MCP_OAUTH_SCOPE,
 							],
-							validAudiences: mcpOAuthAudiences(baseURL),
 							// Root discovery routes are mounted explicitly because better-auth is
 							// served below /api/auth. These confirmations silence only the matching
 							// startup checks; no path-inserted metadata route is published.

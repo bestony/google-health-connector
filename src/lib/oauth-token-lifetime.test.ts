@@ -1,8 +1,21 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+	createMigratedSqlite,
+	type MigratedSqlite,
+} from "../test-support/migrated-sqlite";
 import { MCP_OAUTH_TOKEN_LIFETIME } from "./mcp/oauth-scopes";
 
-function stubOAuthEnvironment() {
-	vi.stubEnv("DATABASE_URL", ":memory:");
+let database: MigratedSqlite | undefined;
+
+/**
+ * Constructing the auth instance starts better-auth's plugin `init`, which the
+ * OAuth provider uses to seed its resource registry. Nothing here awaits that
+ * work, so an unmigrated database would surface as an unhandled rejection
+ * rather than a failed assertion.
+ */
+async function stubOAuthEnvironment() {
+	database = await createMigratedSqlite();
+	vi.stubEnv("DATABASE_URL", database.url);
 	vi.stubEnv(
 		"BETTER_AUTH_SECRET",
 		"test-secret-at-least-thirty-two-characters",
@@ -12,14 +25,18 @@ function stubOAuthEnvironment() {
 	vi.stubEnv("LOG_LEVEL", "error");
 }
 
-afterEach(() => {
+afterEach(async () => {
+	const { resetDb } = await import("../db/client.server");
+	await resetDb();
+	database?.cleanup();
+	database = undefined;
 	vi.unstubAllEnvs();
 	vi.resetModules();
 });
 
 describe("MCP OAuth token lifetime", () => {
 	it("configures the provider with the thirty-day grant", async () => {
-		stubOAuthEnvironment();
+		await stubOAuthEnvironment();
 
 		const { getAuth } = await import("./auth.server");
 		const oauthPlugin = getAuth().options.plugins?.find(
@@ -38,7 +55,7 @@ describe("MCP OAuth token lifetime", () => {
 	});
 
 	it("lets the OAuth access token outlive the browser session", async () => {
-		stubOAuthEnvironment();
+		await stubOAuthEnvironment();
 
 		const { getAuth } = await import("./auth.server");
 		const options = getAuth().options;
@@ -52,7 +69,7 @@ describe("MCP OAuth token lifetime", () => {
 	});
 
 	it("does not let the JWT plugin cap the access token", async () => {
-		stubOAuthEnvironment();
+		await stubOAuthEnvironment();
 
 		const { getAuth } = await import("./auth.server");
 		const jwtPlugin = getAuth().options.plugins?.find(

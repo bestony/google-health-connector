@@ -92,15 +92,24 @@ export function mcpResourceUri(baseUrl: string): string {
 }
 
 /**
- * Audiences accepted for an MCP token.
+ * Resource identifiers this authorization server will mint tokens for.
  *
- * RFC 8707 permits a resource URI at either granularity. MCP clients in the
- * field use both the endpoint URI and its origin, so the authorization server
- * must recognize both while the resource server applies its own exact checks.
+ * The provider treats `resources` as a *closed registry*: a request naming a
+ * `resource` that is not registered is refused with `invalid_target` before the
+ * consent screen ever renders, and MCP clients always send `resource`. So this
+ * list is not documentation — omitting it breaks the entire authorization flow.
+ *
+ * It holds the endpoint URI alone, deliberately. RFC 8707 would permit the bare
+ * origin as well, but `/mcp` verifies `aud` against `mcpResourceUri` exactly, so
+ * registering the origin form would only buy tokens that the resource server
+ * then rejects. Refusing at authorize is the louder, earlier failure.
+ *
+ * This replaces the `validAudiences` option, which the OAuth provider dropped in
+ * 1.7. That option is silently ignored by the current package rather than
+ * rejected, so it must not be reintroduced as a second source of truth.
  */
-export function mcpOAuthAudiences(baseUrl: string): string[] {
-	const issuer = oauthIssuer(baseUrl);
-	return [mcpResourceUri(issuer), issuer];
+export function mcpOAuthResources(baseUrl: string): string[] {
+	return [mcpResourceUri(baseUrl)];
 }
 
 /** RFC 9728 metadata shared by both protected-resource discovery paths. */

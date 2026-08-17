@@ -3,8 +3,14 @@ import { createRequire } from "node:module";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+	createMigratedSqlite,
+	type MigratedSqlite,
+} from "../test-support/migrated-sqlite";
 
 const require = createRequire(import.meta.url);
+
+let database: MigratedSqlite | undefined;
 
 function isNamedFunction(
 	value: unknown,
@@ -43,14 +49,21 @@ async function loadInstalledStoreToken(): Promise<
 	return storeToken;
 }
 
-afterEach(() => {
+afterEach(async () => {
+	const { resetDb } = await import("../db/client.server");
+	await resetDb();
+	database?.cleanup();
+	database = undefined;
 	vi.unstubAllEnvs();
 	vi.resetModules();
 });
 
 describe("MCP OAuth token storage", () => {
 	it("pins hashed storage to a 43-character database representation", async () => {
-		vi.stubEnv("DATABASE_URL", ":memory:");
+		// Constructing the auth instance starts plugin `init`, which seeds the
+		// OAuth resource registry; an unmigrated database rejects unobserved.
+		database = await createMigratedSqlite();
+		vi.stubEnv("DATABASE_URL", database.url);
 		vi.stubEnv(
 			"BETTER_AUTH_SECRET",
 			"test-secret-at-least-thirty-two-characters",
