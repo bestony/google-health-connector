@@ -43,4 +43,20 @@ docker run --rm --env-file .env google-health-connector:migrate
 
 The runtime listens on `0.0.0.0:3000` by default. Set `NITRO_PORT` to use a different port. The deployment environment must provide the database and authentication settings required by the application, including `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL`; add provider-specific variables such as `TURSO_AUTH_TOKEN` when applicable. The image healthcheck requests `/privacy`.
 
+## Google OAuth callback
+
+`BETTER_AUTH_URL` is the public origin users open, not the address Nitro
+binds. If a reverse proxy terminates TLS at `https://health.example.com`
+and forwards to `127.0.0.1:3000`, set
+`BETTER_AUTH_URL=https://health.example.com` and register this redirect
+URI:
+
+```text
+https://health.example.com/api/auth/callback/google
+```
+
+The Authorized JavaScript origin is the same public origin with no path.
+See [`google-oauth.md`](google-oauth.md) for the Console steps and the
+mistakes that produce `redirect_uri_mismatch`.
+
 For host-specific presets (Vercel, Netlify, Cloudflare, AWS Lambda, etc.) and tuning, see https://v3.nitro.build/deploy.

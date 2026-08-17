@@ -254,6 +254,10 @@ Use this procedure only when the existing secret must be retired:
    without it.
 4. Put the credentials in `.env` as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 
+Deployed origins use the same two fields. The operator-facing callback
+examples are in
+[`deployment/google-oauth.md`](deployment/google-oauth.md).
+
 No migration is needed: OAuth identities live in the existing `account` table. Leaving both
 variables empty is supported — the provider is simply not registered and `/login` hides the
 Google button (`src/lib/auth-providers.ts` is what the page asks).

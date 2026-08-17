@@ -54,11 +54,22 @@ vercel env add GOOGLE_CLIENT_SECRET production
 
 ## 3. Point Google at the deployed origin
 
-The redirect URI is derived from `BETTER_AUTH_URL`, so the production one has to be
-whitelisted separately from localhost — see [Google sign-in](../development.md#google-sign-in):
+The redirect URI is derived from `BETTER_AUTH_URL`. Production is a
+different origin from localhost, so it needs its own row on the Google
+OAuth client. The full callback steps are in
+[`google-oauth.md`](google-oauth.md).
 
-- *Authorized redirect URI*: `<BETTER_AUTH_URL>/api/auth/callback/google`
-- *Authorized JavaScript origin*: `<BETTER_AUTH_URL>`
+For `BETTER_AUTH_URL=https://<project>.vercel.app`:
+
+| Google Cloud field | Value |
+| ------------------ | ----- |
+| Authorized redirect URI | `https://<project>.vercel.app/api/auth/callback/google` |
+| Authorized JavaScript origin | `https://<project>.vercel.app` |
+
+If you attach a custom domain, put **that** origin in `BETTER_AUTH_URL`
+and register it instead of the `*.vercel.app` host. Preview deployments
+use a different host; either add each preview origin, or give Preview
+its own custom domain that is already registered.
 
 ## 4. Deploy
 

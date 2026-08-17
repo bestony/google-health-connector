@@ -7,6 +7,7 @@ This directory covers every supported way to run GHealth Connector.
 | Docker Compose | Self-host with SQLite, PostgreSQL, or MySQL | this file |
 | Vercel + Turso | Serverless on Vercel | [`vercel.md`](vercel.md) |
 | Nitro / standalone Docker | A Node host, or one image without Compose | [`nitro.md`](nitro.md) |
+| Google OAuth callback | Authorized redirect URI and JavaScript origin | [`google-oauth.md`](google-oauth.md) |
 
 Local setup, database dialects, authentication, and the MCP server are in
 [`../development.md`](../development.md). The product overview is in
@@ -150,18 +151,21 @@ that could remove a volume.
 
 ## Google OAuth settings
 
-The Google OAuth client must use the same public origin as `BETTER_AUTH_URL`:
+Register the public origin in Google Cloud Console **before** you set
+`GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`. The full callback steps,
+worked examples, and common mistakes are in
+[`google-oauth.md`](google-oauth.md).
 
-- Authorized redirect URI:
-  `<BETTER_AUTH_URL>/api/auth/callback/google`
-- Authorized JavaScript origin: `<BETTER_AUTH_URL>`
+For `BETTER_AUTH_URL=https://health.example.com`:
 
-For example, if `BETTER_AUTH_URL=https://health.example.com`, register
-`https://health.example.com/api/auth/callback/google` and
-`https://health.example.com`. Local development uses
-`http://localhost:3000` and its matching callback. The full local Google
-sign-in steps are in
-[`../development.md#google-sign-in`](../development.md#google-sign-in).
+| Google Cloud field | Value |
+| ------------------ | ----- |
+| Authorized redirect URI | `https://health.example.com/api/auth/callback/google` |
+| Authorized JavaScript origin | `https://health.example.com` |
+
+Do not register `http://127.0.0.1:3000` when TLS terminates in front of
+Compose. Google sign-in and the later Google Health grant both return to
+`/api/auth/callback/google`.
 
 Keep `MCP_OAUTH_ENABLED=false` until the OAuth schema, discovery routes, and
 client configuration are ready. Set `GOOGLE_CLIENT_ID` and
@@ -193,7 +197,8 @@ smoke test.
   migration logs. The migration image must use the same `IMAGE_TAG` as the
   application image.
 - OAuth returns `redirect_uri_mismatch`: compare `BETTER_AUTH_URL` and the
-  registered callback byte-for-byte, including scheme and port.
+  registered callback byte-for-byte, including scheme and port. See
+  [`google-oauth.md`](google-oauth.md).
 - The app is healthy but inaccessible: check `APP_PORT`, the host firewall,
   and the reverse proxy route. The database is reachable only by its Compose
   service name.

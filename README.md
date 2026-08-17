@@ -56,7 +56,7 @@ local walkthrough.
 | Document | What it covers |
 | -------- | -------------- |
 | [Development](development.md) | Local setup, database dialects, authentication, Google Health, legal pages, API keys, MCP server, tests, and linting |
-| [Deployment](deployment/README.md) | Docker Compose, [Vercel + Turso](deployment/vercel.md), and [Nitro / standalone Docker](deployment/nitro.md) |
+| [Deployment](deployment/README.md) | Docker Compose, [Vercel + Turso](deployment/vercel.md), [Nitro / standalone Docker](deployment/nitro.md), and the [Google OAuth callback](deployment/google-oauth.md) |
 
 ## Self-hosted Docker
 
