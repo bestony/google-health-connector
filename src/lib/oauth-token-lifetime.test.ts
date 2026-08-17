@@ -8,12 +8,15 @@ import { MCP_OAUTH_TOKEN_LIFETIME } from "./mcp/oauth-scopes";
 let database: MigratedSqlite | undefined;
 
 /**
- * Constructing the auth instance starts better-auth's plugin `init`, which the
- * OAuth provider uses to seed its resource registry. Nothing here awaits that
- * work, so an unmigrated database would surface as an unhandled rejection
- * rather than a failed assertion.
+ * An OAuth-enabled auth instance whose plugin `init` has finished.
+ *
+ * Constructing the instance starts `init`, and the OAuth provider uses it to
+ * seed its resource registry — a database write nothing here would otherwise
+ * await. Resolving `$context` is what turns that floating promise into ordered
+ * work: without it, teardown can remove the database directory mid-insert and
+ * the failure arrives as an unhandled rejection in whichever test runs next.
  */
-async function stubOAuthEnvironment() {
+async function createOAuthAuth() {
 	database = await createMigratedSqlite();
 	vi.stubEnv("DATABASE_URL", database.url);
 	vi.stubEnv(
@@ -23,6 +26,11 @@ async function stubOAuthEnvironment() {
 	vi.stubEnv("BETTER_AUTH_URL", "http://localhost:3000");
 	vi.stubEnv("MCP_OAUTH_ENABLED", "true");
 	vi.stubEnv("LOG_LEVEL", "error");
+
+	const { getAuth } = await import("./auth.server");
+	const auth = getAuth();
+	await auth.$context;
+	return auth;
 }
 
 afterEach(async () => {
@@ -36,10 +44,8 @@ afterEach(async () => {
 
 describe("MCP OAuth token lifetime", () => {
 	it("configures the provider with the thirty-day grant", async () => {
-		await stubOAuthEnvironment();
-
-		const { getAuth } = await import("./auth.server");
-		const oauthPlugin = getAuth().options.plugins?.find(
+		const auth = await createOAuthAuth();
+		const oauthPlugin = auth.options.plugins?.find(
 			(plugin) => plugin.id === "oauth-provider",
 		);
 
@@ -55,10 +61,7 @@ describe("MCP OAuth token lifetime", () => {
 	});
 
 	it("lets the OAuth access token outlive the browser session", async () => {
-		await stubOAuthEnvironment();
-
-		const { getAuth } = await import("./auth.server");
-		const options = getAuth().options;
+		const options = (await createOAuthAuth()).options;
 
 		// The grant is owned by the consent row, not by the cookie session. If the
 		// session ever outgrew the token this assertion would be meaningless, so it
@@ -69,10 +72,8 @@ describe("MCP OAuth token lifetime", () => {
 	});
 
 	it("does not let the JWT plugin cap the access token", async () => {
-		await stubOAuthEnvironment();
-
-		const { getAuth } = await import("./auth.server");
-		const jwtPlugin = getAuth().options.plugins?.find(
+		const auth = await createOAuthAuth();
+		const jwtPlugin = auth.options.plugins?.find(
 			(plugin) => plugin.id === "jwt",
 		);
 

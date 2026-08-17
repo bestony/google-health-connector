@@ -60,8 +60,9 @@ afterEach(async () => {
 
 describe("MCP OAuth token storage", () => {
 	it("pins hashed storage to a 43-character database representation", async () => {
-		// Constructing the auth instance starts plugin `init`, which seeds the
-		// OAuth resource registry; an unmigrated database rejects unobserved.
+		// A migrated database, and an awaited `$context`: constructing the auth
+		// instance starts plugin `init`, which seeds the OAuth resource registry.
+		// Leaving that write floating lets teardown race it.
 		database = await createMigratedSqlite();
 		vi.stubEnv("DATABASE_URL", database.url);
 		vi.stubEnv(
@@ -73,7 +74,9 @@ describe("MCP OAuth token storage", () => {
 		vi.stubEnv("LOG_LEVEL", "error");
 
 		const { getAuth } = await import("./auth.server");
-		const oauthPlugin = getAuth().options.plugins?.find(
+		const auth = getAuth();
+		await auth.$context;
+		const oauthPlugin = auth.options.plugins?.find(
 			(plugin) => plugin.id === "oauth-provider",
 		);
 		expect(oauthPlugin?.options).toMatchObject({ storeTokens: "hashed" });
