@@ -1,13 +1,81 @@
-Welcome to your new TanStack Start app!
+# GHealth Connector
 
-# Getting Started
+GHealth Connector is a [TanStack Start](https://tanstack.com/start) application
+(React 19, Vite, Nitro). It turns a Google Health account into an MCP endpoint.
 
-To run this application:
+A user signs in, grants health scopes, then approves an OAuth application or
+issues an API key. Clients call `POST /mcp`. The server reads Google Health
+live. It does not store a copy of the health records.
+
+**Hosted service:** [https://www.stillwarm.app/](https://www.stillwarm.app/)
+
+## Hosted service
+
+Use the deployed origin when you do not want to run the server yourself.
+
+| Surface | URL |
+| ------- | --- |
+| Site | [https://www.stillwarm.app/](https://www.stillwarm.app/) |
+| MCP endpoint | `https://www.stillwarm.app/mcp` |
+| Privacy Policy | [https://www.stillwarm.app/privacy](https://www.stillwarm.app/privacy) |
+| Terms of Service | [https://www.stillwarm.app/terms](https://www.stillwarm.app/terms) |
+| Contact | [bestony@linux.com](mailto:bestony@linux.com) |
+
+1. Open the site and sign in.
+2. On `/dashboard`, authorize Google Health.
+3. Approve an OAuth application, or issue one API key.
+4. Point an MCP client at `https://www.stillwarm.app/mcp`.
+
+OAuth-capable client. The first request has no header. Discovery starts from
+the `401` challenge:
+
+```sh
+claude mcp add --transport http ghealth https://www.stillwarm.app/mcp
+```
+
+API-key client:
+
+```sh
+claude mcp add --transport http ghealth https://www.stillwarm.app/mcp \
+  --header "Authorization: Bearer $GHEALTH_API_KEY"
+```
+
+The hosted endpoint exposes three tools:
+
+| Tool | Arguments | Returns |
+| ---- | --------- | ------- |
+| `list_health_data_types` | none | Queryable data types, timing, and which consent categories are readable |
+| `read_health_data` | `dataType`, `from`, `to`, `limit` | Summarised data points, with `truncated` and whether the history window was clamped |
+| `get_health_profile` | none | Profile and settings — date of birth, height, biological sex, units |
+
+See [MCP server](#mcp-server) for authentication, scopes, and the local
+walkthrough.
+
+## Contents
+
+- [Local development](#local-development)
+- [End-to-end tests](#end-to-end-tests)
+- [Building For Production](#building-for-production)
+- [Database](#database)
+- [Authentication](#authentication)
+- [Legal pages](#legal-pages)
+- [API keys](#api-keys)
+- [MCP server](#mcp-server)
+- [Linting & Formatting](#linting--formatting)
+- [Deploy with Nitro](#deploy-with-nitro)
+- [Deploy with Docker](#deploy-with-docker)
+
+## Local development
+
+To run this application locally:
 
 ```bash
 pnpm install
 pnpm dev
 ```
+
+Copy `.env.example` to `.env` and fill in the values. See
+[Authentication](#authentication) and [Database](#database).
 
 # End-to-end tests
 
@@ -300,7 +368,8 @@ export const Route = createFileRoute('/dashboard')({
 })
 ```
 
-`/login` and `/dashboard` are working demos of that flow — restyle or delete them freely.
+`/login` and `/dashboard` are the product UI for that flow: sign-in, Google
+Health authorization, API keys, and connected apps.
 
 After changing the better-auth config (new plugins, `additionalFields`, …), regenerate the
 tables with `pnpm auth:generate` — it rewrites `src/db/schema/<dialect>-auth.ts` for all
@@ -811,7 +880,11 @@ An OAuth-capable client needs no configured header. Its first credential-less re
 the `401` challenge, completes discovery and opens the browser for login and consent:
 
 ```sh
+# Local
 claude mcp add --transport http ghealth http://localhost:3000/mcp
+
+# Hosted
+claude mcp add --transport http ghealth https://www.stillwarm.app/mcp
 ```
 
 The API-key counterpart is manual. The key travels in `Authorization: Bearer <key>` — the
@@ -819,7 +892,12 @@ header MCP clients can set — or in `x-api-key`, which is better-auth's plugin 
 [API keys](#api-keys) for where keys come from.
 
 ```sh
+# Local
 claude mcp add --transport http ghealth http://localhost:3000/mcp \
+  --header "Authorization: Bearer $GHEALTH_API_KEY"
+
+# Hosted
+claude mcp add --transport http ghealth https://www.stillwarm.app/mcp \
   --header "Authorization: Bearer $GHEALTH_API_KEY"
 ```
 
@@ -894,19 +972,6 @@ Set `LOG_LEVEL=debug` to log every request's JSON-RPC method, status and duratio
 `mcp:handler` and `mcp:server` scopes — the client's own logs are usually out of reach, so
 this is the first place to look when a tool call misbehaves.
 
-## Styling
-
-This project uses [Tailwind CSS](https://tailwindcss.com/) for styling.
-
-### Removing Tailwind CSS
-
-If you prefer not to use Tailwind CSS:
-
-1. Remove the demo pages in `src/routes/demo/`
-2. Replace the Tailwind import in `src/styles.css` with your own styles
-3. Remove `tailwindcss()` from the plugins array in `vite.config.ts`
-4. Remove `@tailwindcss/vite` and `tailwindcss` from `package.json`
-
 ## Linting & Formatting
 
 This project uses [Biome](https://biomejs.dev/) for linting and formatting. The following scripts are available:
@@ -951,155 +1016,3 @@ docker run --rm --env-file .env google-health-connector:migrate
 The runtime listens on `0.0.0.0:3000` by default. Set `NITRO_PORT` to use a different port. The deployment environment must provide the database and authentication settings required by the application, including `DATABASE_URL`, `BETTER_AUTH_SECRET`, and `BETTER_AUTH_URL`; add provider-specific variables such as `TURSO_AUTH_TOKEN` when applicable. The image healthcheck requests `/privacy`.
 
 For host-specific presets (Vercel, Netlify, Cloudflare, AWS Lambda, etc.) and tuning, see https://v3.nitro.build/deploy.
-
-
-
-## Routing
-
-This project uses [TanStack Router](https://tanstack.com/router) with file-based routing. Routes are managed as files in `src/routes`.
-
-### Adding A Route
-
-To add a new route to your application just add a new file in the `./src/routes` directory.
-
-TanStack will automatically generate the content of the route file for you.
-
-Now that you have two routes you can use a `Link` component to navigate between them.
-
-### Adding Links
-
-To use SPA (Single Page Application) navigation you will need to import the `Link` component from `@tanstack/react-router`.
-
-```tsx
-import { Link } from "@tanstack/react-router";
-```
-
-Then anywhere in your JSX you can use it like so:
-
-```tsx
-<Link to="/about">About</Link>
-```
-
-This will create a link that will navigate to the `/about` route.
-
-More information on the `Link` component can be found in the [Link documentation](https://tanstack.com/router/v1/docs/framework/react/api/router/linkComponent).
-
-### Using A Layout
-
-In the File Based Routing setup the layout is located in `src/routes/__root.tsx`. Anything you add to the root route will appear in all the routes. The route content will appear in the JSX where you render `{children}` in the `shellComponent`.
-
-Here is an example layout that includes a header:
-
-```tsx
-import { HeadContent, Scripts, createRootRoute } from '@tanstack/react-router'
-
-export const Route = createRootRoute({
-  head: () => ({
-    meta: [
-      { charSet: 'utf-8' },
-      { name: 'viewport', content: 'width=device-width, initial-scale=1' },
-      { title: 'My App' },
-    ],
-  }),
-  shellComponent: ({ children }) => (
-    <html lang="en">
-      <head>
-        <HeadContent />
-      </head>
-      <body>
-        <header>
-          <nav>
-            <Link to="/">Home</Link>
-            <Link to="/about">About</Link>
-          </nav>
-        </header>
-        {children}
-        <Scripts />
-      </body>
-    </html>
-  ),
-})
-```
-
-More information on layouts can be found in the [Layouts documentation](https://tanstack.com/router/latest/docs/framework/react/guide/routing-concepts#layouts).
-
-## Server Functions
-
-TanStack Start provides server functions that allow you to write server-side code that seamlessly integrates with your client components.
-
-```tsx
-import { createServerFn } from '@tanstack/react-start'
-
-const getServerTime = createServerFn({
-  method: 'GET',
-}).handler(async () => {
-  return new Date().toISOString()
-})
-
-// Use in a component
-function MyComponent() {
-  const [time, setTime] = useState('')
-  
-  useEffect(() => {
-    getServerTime().then(setTime)
-  }, [])
-  
-  return <div>Server time: {time}</div>
-}
-```
-
-## API Routes
-
-You can create API routes by using the `server` property in your route definitions:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-import { json } from '@tanstack/react-start'
-
-export const Route = createFileRoute('/api/hello')({
-  server: {
-    handlers: {
-      GET: () => json({ message: 'Hello, World!' }),
-    },
-  },
-})
-```
-
-## Data Fetching
-
-There are multiple ways to fetch data in your application. You can use TanStack Query to fetch data from a server. But you can also use the `loader` functionality built into TanStack Router to load the data for a route before it's rendered.
-
-For example:
-
-```tsx
-import { createFileRoute } from '@tanstack/react-router'
-
-export const Route = createFileRoute('/people')({
-  loader: async () => {
-    const response = await fetch('https://swapi.dev/api/people')
-    return response.json()
-  },
-  component: PeopleComponent,
-})
-
-function PeopleComponent() {
-  const data = Route.useLoaderData()
-  return (
-    <ul>
-      {data.results.map((person) => (
-        <li key={person.name}>{person.name}</li>
-      ))}
-    </ul>
-  )
-}
-```
-
-Loaders simplify your data fetching logic dramatically. Check out more information in the [Loader documentation](https://tanstack.com/router/latest/docs/framework/react/guide/data-loading#loader-parameters).
-
-
-
-# Learn More
-
-You can learn more about all of the offerings from TanStack in the [TanStack documentation](https://tanstack.com).
-
-For TanStack Start specific documentation, visit [TanStack Start](https://tanstack.com/start).
