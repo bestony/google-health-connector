@@ -9,6 +9,11 @@ const {
 	FakeGoogleHealthApiError,
 	createGoogleHealthClient,
 	getAuthBaseUrl,
+	getHealthSyncBackfillDays,
+	isHealthSyncEnabled,
+	readHealthDataPoints,
+	readHealthSyncAccount,
+	readHealthSyncStates,
 } = vi.hoisted(() => {
 	class HoistedGoogleHealthApiError extends Error {
 		readonly status: number;
@@ -34,13 +39,28 @@ const {
 		FakeGoogleHealthApiError: HoistedGoogleHealthApiError,
 		createGoogleHealthClient: vi.fn(),
 		getAuthBaseUrl: vi.fn(() => "https://connector.example///"),
+		getHealthSyncBackfillDays: vi.fn(() => 730),
+		isHealthSyncEnabled: vi.fn(() => false),
+		readHealthDataPoints: vi.fn(async () => []),
+		readHealthSyncAccount: vi.fn(async () => undefined),
+		readHealthSyncStates: vi.fn(async () => []),
 	};
 });
 
 vi.mock("../env.server", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../env.server")>();
-	return { ...actual, getAuthBaseUrl };
+	return {
+		...actual,
+		getAuthBaseUrl,
+		getHealthSyncBackfillDays,
+		isHealthSyncEnabled,
+	};
 });
+vi.mock("../../db/health-cache.server", () => ({ readHealthDataPoints }));
+vi.mock("../../db/health-sync-state.server", () => ({
+	readHealthSyncAccount,
+	readHealthSyncStates,
+}));
 vi.mock("../google-health-api.server", () => ({
 	createGoogleHealthClient,
 	GoogleHealthApiError: FakeGoogleHealthApiError,
@@ -81,6 +101,14 @@ describe("MCP server", () => {
 	beforeEach(() => {
 		getAuthBaseUrl.mockClear();
 		createGoogleHealthClient.mockReset();
+		isHealthSyncEnabled.mockReturnValue(false);
+		getHealthSyncBackfillDays.mockReturnValue(730);
+		readHealthDataPoints.mockReset();
+		readHealthDataPoints.mockResolvedValue([]);
+		readHealthSyncAccount.mockReset();
+		readHealthSyncAccount.mockResolvedValue(undefined);
+		readHealthSyncStates.mockReset();
+		readHealthSyncStates.mockResolvedValue([]);
 	});
 
 	it("lists types and readable categories for an authenticated caller", async () => {
@@ -361,5 +389,211 @@ describe("MCP server", () => {
 			arguments: {},
 		});
 		expect(resultText(stringResult)).toContain("profile string failure");
+	});
+});
+
+describe("read_health_data and the stored history", () => {
+	// A sibling describe does not inherit the block above's beforeEach, and these
+	// mocks are module-level, so they have to be reset here too.
+	beforeEach(() => {
+		createGoogleHealthClient.mockReset();
+		isHealthSyncEnabled.mockReturnValue(false);
+		getHealthSyncBackfillDays.mockReturnValue(730);
+		readHealthDataPoints.mockReset();
+		readHealthDataPoints.mockResolvedValue([]);
+		readHealthSyncAccount.mockReset();
+		readHealthSyncAccount.mockResolvedValue(undefined);
+		readHealthSyncStates.mockReset();
+		readHealthSyncStates.mockResolvedValue([]);
+	});
+
+	const IDENTITY = {
+		authenticated: true as const,
+		keyId: "key-1",
+		userId: "user-1",
+	};
+	const WINDOW = {
+		from: "2025-01-01T00:00:00Z",
+		to: "2025-02-01T00:00:00Z",
+	};
+
+	/** Opted in, with the window fully covered. */
+	function optedIn(
+		coverage = {
+			coveredFromMs: Date.parse("2024-01-01T00:00:00Z"),
+			coveredThroughMs: Date.parse("2026-09-18T00:00:00Z"),
+		},
+	) {
+		isHealthSyncEnabled.mockReturnValue(true);
+		readHealthSyncAccount.mockResolvedValue({ enabled: true } as never);
+		readHealthSyncStates.mockResolvedValue([
+			{ dataType: "steps", ...coverage },
+		] as never);
+	}
+
+	function liveClient(points: unknown[] = []) {
+		const collectDataPoints = vi.fn(async () => points);
+		createGoogleHealthClient.mockReturnValue({ collectDataPoints });
+		return collectDataPoints;
+	}
+
+	it("serves a covered window from the cache without calling Google", async () => {
+		optedIn();
+		readHealthDataPoints.mockResolvedValue([
+			{
+				dataType: "steps",
+				observedAtMs: Date.parse("2025-01-02T00:00:00Z"),
+				observedEndMs: Date.parse("2025-01-02T00:15:00Z"),
+				resourceName: null,
+				value: { count: "1200" },
+			},
+		] as never);
+		const { client } = await connected(IDENTITY);
+
+		const result = await client.callTool({
+			arguments: { dataType: "steps", ...WINDOW },
+			name: "read_health_data",
+		});
+
+		const payload = resultJson(result);
+		expect(payload.source).toBe("cache");
+		expect(payload.count).toBe(1);
+		expect(createGoogleHealthClient).not.toHaveBeenCalled();
+		expect(payload.dataPoints).toEqual([
+			{
+				end: "2025-01-02T00:15:00.000Z",
+				start: "2025-01-02T00:00:00.000Z",
+				type: "steps",
+				value: { count: "1200" },
+			},
+		]);
+	});
+
+	it("reads sleep from the cache on the overlap anchor", async () => {
+		optedIn();
+		readHealthSyncStates.mockResolvedValue([
+			{
+				coveredFromMs: Date.parse("2024-01-01T00:00:00Z"),
+				coveredThroughMs: Date.parse("2026-09-18T00:00:00Z"),
+				dataType: "sleep",
+			},
+		] as never);
+		const { client } = await connected(IDENTITY);
+
+		await client.callTool({
+			arguments: { dataType: "sleep", ...WINDOW },
+			name: "read_health_data",
+		});
+
+		// A night that began before the window is the normal case for sleep.
+		expect(readHealthDataPoints).toHaveBeenCalledWith(
+			expect.objectContaining({ anchor: "overlap", dataType: "sleep" }),
+		);
+	});
+
+	it("falls back to Google when the window is not fully covered", async () => {
+		optedIn({
+			coveredFromMs: Date.parse("2025-01-15T00:00:00Z"),
+			coveredThroughMs: Date.parse("2026-09-18T00:00:00Z"),
+		});
+		const collect = liveClient();
+		const { client } = await connected(IDENTITY);
+
+		const payload = resultJson(
+			await client.callTool({
+				arguments: { dataType: "steps", ...WINDOW },
+				name: "read_health_data",
+			}),
+		);
+
+		expect(payload.source).toBe("live");
+		expect(collect).toHaveBeenCalled();
+		expect(readHealthDataPoints).not.toHaveBeenCalled();
+	});
+
+	it("falls back to Google for an open-ended request", async () => {
+		// No upper bound means "up to now", and the sync deliberately stops at
+		// D-2, so this can never be fully covered.
+		optedIn();
+		liveClient();
+		const { client } = await connected(IDENTITY);
+
+		const payload = resultJson(
+			await client.callTool({
+				arguments: { dataType: "steps", from: WINDOW.from },
+				name: "read_health_data",
+			}),
+		);
+
+		expect(payload.source).toBe("live");
+		expect(readHealthDataPoints).not.toHaveBeenCalled();
+	});
+
+	it("falls back to Google for a user who never opted in", async () => {
+		isHealthSyncEnabled.mockReturnValue(true);
+		readHealthSyncAccount.mockResolvedValue({ enabled: false } as never);
+		liveClient();
+		const { client } = await connected(IDENTITY);
+
+		const payload = resultJson(
+			await client.callTool({
+				arguments: { dataType: "steps", ...WINDOW },
+				name: "read_health_data",
+			}),
+		);
+
+		expect(payload.source).toBe("live");
+		expect(readHealthSyncStates).not.toHaveBeenCalled();
+	});
+
+	it("never touches the cache tables when the sync is off entirely", async () => {
+		liveClient();
+		const { client } = await connected(IDENTITY);
+
+		await client.callTool({
+			arguments: { dataType: "steps", ...WINDOW },
+			name: "read_health_data",
+		});
+
+		expect(readHealthSyncAccount).not.toHaveBeenCalled();
+		expect(readHealthDataPoints).not.toHaveBeenCalled();
+	});
+
+	it("clamps a live read to ninety days and a cached one to the backfill floor", async () => {
+		const collect = liveClient();
+		const { client: liveOnly } = await connected(IDENTITY);
+		const live = resultJson(
+			await liveOnly.callTool({
+				arguments: {
+					dataType: "steps",
+					from: "2000-01-01T00:00:00Z",
+					to: WINDOW.to,
+				},
+				name: "read_health_data",
+			}),
+		);
+		expect(live.historyClamped).toContain("90-day");
+		expect(collect).toHaveBeenCalled();
+
+		// The cache only holds what the sync fetched, so the backfill floor is
+		// the entitlement — enforced when the data was written.
+		optedIn({
+			coveredFromMs: Date.parse("2000-01-01T00:00:00Z"),
+			coveredThroughMs: Date.parse("2026-09-18T00:00:00Z"),
+		});
+		getHealthSyncBackfillDays.mockReturnValue(3650);
+		const { client: cached } = await connected(IDENTITY);
+		const payload = resultJson(
+			await cached.callTool({
+				arguments: {
+					dataType: "steps",
+					from: "2020-01-01T00:00:00Z",
+					to: WINDOW.to,
+				},
+				name: "read_health_data",
+			}),
+		);
+		expect(payload.source).toBe("cache");
+		expect(payload.historyClamped).toBeUndefined();
 	});
 });

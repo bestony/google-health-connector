@@ -14,6 +14,7 @@ guides are in [`deployment/`](deployment/README.md).
 - [Legal pages](#legal-pages)
 - [API keys](#api-keys)
 - [MCP server](#mcp-server)
+- [Background sync](#background-sync)
 - [Linting & Formatting](#linting--formatting)
 
 ## Local development
@@ -811,6 +812,241 @@ ECG and an ungranted category all come back as a sentence saying what to do inst
 Set `LOG_LEVEL=debug` to log every request's JSON-RPC method, status and duration under the
 `mcp:handler` and `mcp:server` scopes — the client's own logs are usually out of reach, so
 this is the first place to look when a tool call misbehaves.
+
+## Background sync
+
+Everything above reads Google Health live. This does not: for users who opt in,
+a scheduled job fetches the categories they already authorized once a day and
+stores the points, so that a question spanning more than the last few months
+can be answered at all. `read_health_data` then serves a fully covered window
+from that store instead of asking Google.
+
+It is off twice over. `HEALTH_SYNC_ENABLED` must be `true` for the deployment,
+and each user must turn on stored history from the History tab on `/dashboard`.
+Neither implies the other, and `health_sync_account.enabled` defaults to false.
+
+### There is no job queue, and please do not add one
+
+What a run owes is **derived** from `health_sync_state` on every invocation: a
+watermark behind the daily window means daily work is owed, a lower watermark
+above the history floor means backfill is owed, a disabled pair means nothing
+is owed. `planInvocation()` in `src/lib/health-sync/plan.ts` is a pure function
+over that state.
+
+A queue table would be a second source of truth that can disagree with the data
+it describes, and would need its own reconciliation. Deriving instead makes the
+planner crash-safe and idempotent, leaves no orphaned jobs, and makes "resumable
+across invocations" something that falls out rather than something that was
+built. An invocation killed halfway through simply leaves state where it was,
+and the next one sees the same debt.
+
+### D-2, in the user's calendar
+
+The daily window ends at the start of D-1 and covers the three local days
+before that — D-4 through D-2 by default.
+
+Two days back, because a day is still settling while devices sync and Google
+derives its daily summaries from the samples underneath them. Reading yesterday
+gets a partial answer that has to be re-read anyway.
+
+Three days wide, because D-2 is the right *anchor* and the wrong *window*:
+phones and watches backfill into Google Health late and out of order, and a
+watch left on the charger drops a hole into a window that only ever looked at
+one day. Re-reading is close to free — the identity digest makes a re-read land
+on the same row — so it is the cheapest repair mechanism available and needs no
+separate reconciliation pass.
+
+In the *user's* calendar, not UTC. For someone in `Asia/Shanghai` a UTC-anchored
+window is eight hours out of step, which misfiles a third of every night's
+sleep, and Google dates daily summaries by the user's local day. The zone comes
+from `Settings.timeZone` (an IANA name), then from `Settings.utcOffset` mapped
+to a fixed-offset zone, then UTC; `health_sync_account.time_zone_source`
+records which, so "the user is in UTC" can be told from "we never found out".
+Reading it needs the `settings.readonly` category, which is separate from every
+health category and which many users will not have granted.
+
+### The first night is noisy. That is the design, not a bug
+
+Google publishes no mapping from its forty data types onto its twelve consent
+categories, and `mcp/health.ts` already refuses to invent one. So the sync
+probes all forty and *remembers*: a type that answers 403 or 404 is recorded
+against that user in `health_sync_state` and skipped until its re-probe comes
+due a week later.
+
+The first run for a user is therefore expensive and full of refusals. Every run
+after it touches only the ten or fifteen types that actually work. The weekly
+re-probe is what lets a category granted later start syncing with nobody
+touching anything; the History tab's retry button is for the user who has just
+granted one and would otherwise wonder why nothing changed.
+
+### Coverage is a pair of watermarks
+
+`health_sync_state` stores `[covered_from_ms, covered_through_ms)` rather than a
+set of ranges, because coverage only ever grows by two monotone motions from one
+anchor — the daily job extends the top, the backfill extends the bottom — and
+both windows are computed from the current watermarks by
+`src/lib/google-health-sync-window.ts`.
+
+`mergeCoverage()` **refuses** a window that neither touches nor overlaps the
+existing range. A recorded hole would be invisible afterwards, and the read path
+would serve it as an empty stretch of the user's life.
+
+The same module's `nextForwardWindow()` walks a long absence forward in bounded
+contiguous steps, which is why a user who stopped syncing for eight months
+catches up without either a single enormous request or a gap.
+
+### The ECG trap
+
+`dataPointTimeFilter()` **throws** when given an upper bound for
+`electrocardiogram`: Google accepts only `>=` on an ECG's start time. That throw
+is correct — silently widening a one-day request into "everything since" is the
+bug it prevents — but it means a sweep across every data type has to know in
+advance. `src/lib/health-sync/data-window.ts` encodes it once, dropping `to` and
+handing back a `filterBefore` the caller trims with. A test sweeps all forty
+catalog types to prove none throws.
+
+Sleep needs nothing special: `google-health-filter.ts` already anchors it on
+`interval.end_time`, which is right for a window sync too.
+
+### Running it locally
+
+```bash
+HEALTH_SYNC_ENABLED=true CRON_SECRET=dev LOG_LEVEL=debug pnpm dev
+```
+
+```bash
+# What the next run would do. No lease, no writes — safe against production.
+curl -H "Authorization: Bearer dev" 'localhost:3000/api/cron/sync?dryRun=1'
+
+# One slice. Call it until `moreWork` is false.
+curl -X POST -H "Authorization: Bearer dev" localhost:3000/api/cron/sync
+
+# The last twenty runs.
+curl -H "Authorization: Bearer dev" localhost:3000/api/cron/status
+```
+
+`?dryRun=1` is the first thing to reach for when the sync is not doing what
+somebody expected.
+
+### Reading the run log
+
+`health_sync_run` exists because logs are the wrong place to answer "did last
+night's sync run": production defaults `LOG_LEVEL` to `error`, and a serverless
+platform's log retention is short.
+
+**A row with `finished_at` null and an old `started_at` is an invocation the
+platform killed.** That is the one failure that leaves no log line — a killed
+process does not get to write one — so it is worth knowing the shape.
+
+`outcome` is one of `completed`, `partial`, `idle`, `skipped_locked`,
+`skipped_disabled`, `lost_lease` or `failed`. `skipped_locked` is normal on a
+ten-minute schedule and answers **200**, not 409: a systemd `OnFailure=`, a
+Vercel cron retry and a Docker healthcheck all read non-2xx as an incident.
+
+### The lease
+
+One row, one fencing token. Acquire is a conditional UPDATE followed by a read
+of the token — not an affected-row count, because the three drivers report that
+three different ways and MySQL reports zero for an UPDATE that matched but
+changed nothing.
+
+`releaseLease` and `heartbeatLease` both match on the token, and that guard is
+the most important line in the file: a stalled invocation whose lease expired
+and was taken by someone else cannot come back and overwrite the new holder's
+rotation cursor. A process killed at a platform timeout self-heals one TTL
+later, with no janitor.
+
+`SELECT ... FOR UPDATE` has no SQLite equivalent and would hold a transaction
+open for a whole invocation; advisory locks are PostgreSQL-only. Neither was an
+option.
+
+### Tuning constants are not environment variables
+
+Chunk sizes, retry counts, backoff, cooldowns, concurrency and the per-user
+budget share live in `src/lib/health-sync/config.ts` with their reasoning, for
+the same argument `api-key-config.ts` makes about `API_KEY_RATE_LIMIT`: each one
+needs a paragraph and a unit test far more than it needs a deployment-time knob.
+
+On Vercel, `HEALTH_SYNC_BUDGET_MS` must stay below the function's
+`maxDuration`, which `vite.config.ts` sets through Nitro's Vercel options — and
+the cron schedule lives there too, because Nitro writes
+`.vercel/output/config.json` itself and does not merge `vercel.json` into it.
+`deployment/vercel.md` has the detail and the command to verify it.
+
+Five things genuinely vary by deployment and are environment variables:
+`HEALTH_SYNC_ENABLED`, `CRON_SECRET`, `HEALTH_SYNC_BUDGET_MS`,
+`HEALTH_SYNC_BACKFILL_DAYS` and `HEALTH_SYNC_DATA_TYPES`.
+
+`CONCURRENCY` deserves a note: nothing else in this app throttles outbound calls
+to Google — the API client has no retry loop and no token bucket — so that one
+constant is the difference between a polite client and a self-inflicted 429.
+
+### How far back a read reaches
+
+A **live** read is clamped to `HISTORY_LIMIT_DAYS`. A **cached** read is clamped
+to `HEALTH_SYNC_BACKFILL_DAYS` instead, because the cache only ever contains
+what the sync fetched: the floor *is* the entitlement, enforced when the data
+was written rather than again when it is read. Without that, a user who opted in
+and waited two years for history to accumulate could not read any of it past
+ninety days, and the feature would collect data nobody could ask about.
+
+A cached read needs an explicit `to`. An open-ended request means "up to now",
+and the sync deliberately stops at D-2, so it can never be fully covered — which
+is the right answer, because an open-ended question asks for the newest data and
+that is exactly what the cache does not have. The reply names which path it took
+in `source`.
+
+### Two things a consumer has to know
+
+**The same measurement from two devices is two rows.** `source_key` is part of a
+point's identity, so a phone and a watch reporting the same fifteen minutes of
+steps are two observations, correctly. Never `SUM` across sources blindly;
+`source_key` is on the row so an aggregate can pick one.
+
+**Deletion rides on `synced_at`, not on a transaction.** Every row a run writes
+is stamped with the run's start, and a sweep then deletes what it did not
+restamp inside that window — which is how a point the user deleted in Google
+leaves the cache. It is crash-safe by omission: a run that dies mid-window never
+prunes, and the next complete run does. Turso speaks HTTP, which is exactly
+where not to depend on a transaction.
+
+### Capacity, and the ceiling
+
+At roughly 200 ms per Google request, concurrency 4 and forty candidate types,
+a user's first daily pass is about two seconds of wall clock. After the first
+night only the working types remain, so steady state is perhaps three times
+cheaper.
+
+| Platform | Budget | Users per invocation | Invocations per day |
+| --- | --- | --- | --- |
+| Vercel Hobby (10s function, 1 cron/day) | 8s | ~4 | 1 |
+| Vercel Pro (60s, `*/10`) | 55s | ~27 | 144 |
+| Self-hosted (120s, `*/10`) | 120s | ~60 | 144 |
+
+**This design is sized for low hundreds of users.** Past that the next step is
+per-user fan-out — one invocation dispatching N user-scoped invocations — and
+that is a rewrite of the handler, not a bigger constant.
+
+### Known gaps
+
+**Revoking at Google does not delete what was already cached.** There is no
+webhook to hear it from, so the sync simply starts failing that user's
+authorization and stops. The records stay until the user deletes them from the
+History tab or deletes their account. The privacy policy says exactly this
+rather than claiming an automatic deletion that does not happen.
+
+**Nothing prunes data older than the backfill floor.** The floor governs how far
+back to *fetch*, not how long to keep, and the policy is written to match: we
+keep what we fetched until the user says otherwise. Adding a retention sweep
+would mean silently deleting history a user may value, so it is a decision to
+take deliberately rather than a gap to close quietly.
+
+**High-frequency types are stored at full fidelity.** `heart-rate` is roughly
+1500-2000 points a day, so a user-year is about 250 MB for that one type. The
+`grain` column and the integer index exist so a daily rollup can be added later
+without touching a large table; until then `MAX_POINTS_PER_USER_RUN` is what
+stops a backfill filling a disk unnoticed.
+
 
 ## Linting & Formatting
 

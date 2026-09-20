@@ -106,3 +106,87 @@ are capped at `MAX_POOL_CONNECTIONS` (5) per process in `src/db/client.server.ts
 serverless multiplies that by the number of warm instances, so past a handful the answer is
 a pooler in front of the database — PgBouncer, Neon's pooled endpoint, PlanetScale — not a
 larger number. Turso is exempt: it is stateless HTTP and pools nothing.
+
+## Background health sync
+
+The sync runs as a Vercel Cron job calling this app's own endpoint.
+
+**The schedule lives in `vite.config.ts`, not in `vercel.json`.** Nitro builds
+this app through the Build Output API and writes `.vercel/output/config.json`
+itself; it does not merge the repository's `vercel.json` into that file. A
+`crons` block in `vercel.json` would therefore be a schedule that looks
+configured and may never fire, which is the worst failure available to a job
+nobody watches. Nitro's `vercel.config` passes straight through:
+
+```ts
+nitro({
+  vercel: {
+    config: {
+      version: 3,
+      crons: [{ path: "/api/cron/sync", schedule: "*/10 * * * *" }],
+    },
+    functions: { maxDuration: 60 },
+  },
+})
+```
+
+Confirm it after any change to that block:
+
+```bash
+NITRO_PRESET=vercel pnpm build
+cat .vercel/output/config.json   # must contain your crons entry
+```
+
+Every ten minutes, which assumes **Vercel Pro**. The daily work needs one run a
+day, but the backfill advances one chunk per user per invocation, so the
+interval is what decides whether years of history take days or months. A run
+that finds nothing owed costs one `idle` row.
+
+`maxDuration` is app-wide rather than per-route because Nitro deploys the whole
+app as a single function — the generated output routes `/(.*)` to one
+`__server`. A ceiling costs nothing on its own; Vercel bills actual duration. 60
+is Pro's default maximum; Pro allows raising it to 300, and
+`HEALTH_SYNC_BUDGET_MS` must always stay below whatever it is set to, or the
+platform kills a run while it is writing its own bookkeeping.
+
+### Environment variables
+
+| Variable | Value |
+| --- | --- |
+| `HEALTH_SYNC_ENABLED` | `true`. Anything else, including unset, makes both cron routes answer 404. |
+| `CRON_SECRET` | A long random string. **The name matters**: Vercel attaches `Authorization: Bearer $CRON_SECRET` to its cron invocations only when a variable of exactly this name exists. |
+| `HEALTH_SYNC_BUDGET_MS` | `50000` on Pro, comfortably under the 60-second ceiling. |
+| `LOG_LEVEL` | `info`, so the two-line run summary is visible. The production default is `error`, which hides it. |
+
+Turning the switch on does not store anyone's data. Each user opts in
+separately from the History tab on `/dashboard`.
+
+### On Hobby instead
+
+Hobby allows a single cron per day and a 10-second function timeout, which is
+roughly four users a night. Daily syncing keeps up at that rate for a handful of
+users; the backfill advances one chunk per user per night, so a year of history
+takes weeks. Use `"0 5 * * *"` and leave `HEALTH_SYNC_BUDGET_MS` at its 8000
+default. The run log says what is happening — `moreWork: true` on every run
+until the debt clears.
+
+### Checking on it
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" https://<your-app>/api/cron/status
+```
+
+The last twenty runs. A row with `finishedAt` null and an old `startedAt` is an
+invocation the platform killed — the one failure that leaves no log line.
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  'https://<your-app>/api/cron/sync?dryRun=1'
+```
+
+What the next run *would* do. Takes no lease and writes nothing, so it is safe
+to run against production at any time.
+
+**Preview deployments inherit crons only in production.** A preview build does
+not run the sync, which is what you want given that previews may point at the
+production database.

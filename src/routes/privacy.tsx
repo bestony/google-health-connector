@@ -107,8 +107,14 @@ const SECTIONS: readonly LegalSection[] = [
 					</li>
 					<li>
 						We read each record live from Google when you or a connected MCP
-						client requests it. We do not write health records to our database
-						or server-side caches.
+						client requests it, and by default we keep no copy of it.
+					</li>
+					<li>
+						You can turn on <strong>stored history</strong> on your dashboard.
+						While it is on, we fetch the categories you already authorized once
+						a day and keep them, so questions that span more than the last few
+						months can be answered. It is off until you turn it on, and turning
+						it off deletes everything we kept.
 					</li>
 					<li>
 						We do not sell your data, we do not use it for advertising, and we
@@ -209,11 +215,22 @@ const SECTIONS: readonly LegalSection[] = [
 					dashboard shows exactly which permissions Google actually granted.
 				</Para>
 				<Para>
-					The Service retrieves health records directly from Google for each
-					request. It processes a record in memory only long enough to return
-					the response you requested or send it to an MCP client you connected.
-					It does not write the record to a database, a server-side cache or a
-					backup.
+					By default the Service retrieves health records directly from Google
+					for each request. It processes a record in memory only long enough to
+					return the response you requested or send it to an MCP client you
+					connected, and does not write it to a database, a server-side cache or
+					a backup.
+				</Para>
+				<Para>
+					Stored history changes that, and only for as long as you leave it on.
+					Turning it on from your dashboard tells us to fetch the categories you
+					already granted on a daily schedule and keep the records in our
+					database, so that a question about last year can be answered without
+					asking Google for a year of data in one request. It never widens what
+					we may read: we store only what your Google permissions already allow
+					us to retrieve, and a category you leave unticked is never fetched and
+					never stored. See <Ref id="retention" /> for how long we keep it and{" "}
+					<Ref id="your-choices" /> for how to delete it.
 				</Para>
 
 				<Subheading>c. Google authorization credentials</Subheading>
@@ -549,10 +566,15 @@ const SECTIONS: readonly LegalSection[] = [
 		body: (
 			<Bullets>
 				<li>
-					<strong>Google Health data</strong> — not retained on our servers. We
-					read it from Google for one request and do not write it to our
-					database, server-side caches or backups. Google keeps the source
-					records under your Google Account settings.
+					<strong>Google Health data</strong> — not retained on our servers
+					unless you turn on stored history. Without it we read a record from
+					Google for one request and do not write it to our database,
+					server-side caches or backups. With it on, we keep the records we
+					fetched until you turn it off, delete them from your dashboard, or
+					delete your account — whichever comes first. There is no separate
+					expiry clock: we do not quietly discard your history behind your back,
+					and we do not keep it once you have told us to stop. Google keeps the
+					source records under your Google Account settings either way.
 				</li>
 				<li>
 					<strong>Google authorization credentials</strong> — updated when
@@ -600,7 +622,7 @@ const SECTIONS: readonly LegalSection[] = [
 		body: (
 			<>
 				<Para>
-					These four controls are independent. You can use any of them at any
+					These five controls are independent. You can use any of them at any
 					time without giving a reason.
 				</Para>
 				<Steps>
@@ -610,9 +632,20 @@ const SECTIONS: readonly LegalSection[] = [
 							{LEGAL_LINKS.googlePermissions}
 						</ExternalLink>{" "}
 						and remove {LEGAL.appName}. We can no longer read anything from
-						Google Health from that moment. We hold no server-side copy of your
-						health records to delete. Revocation cannot recall data an MCP
-						client already received.
+						Google Health from that moment, and the daily sync stops. If you had
+						stored history turned on, the records we already fetched stay until
+						you delete them — use the History tab on your dashboard, which
+						removes them immediately, or delete your account. Revocation cannot
+						recall data an MCP client already received.
+					</li>
+					<li>
+						<strong>Stop storing your history, and delete what we kept.</strong>{" "}
+						Use the History tab on your dashboard. Turning stored history off
+						deletes every record we cached for you straight away — not on a
+						schedule, and not marked as inactive somewhere. The same tab can
+						delete what is stored while leaving the setting on, if you would
+						rather start the history over. Neither action affects your Google
+						permissions, your API key or any connected application.
 					</li>
 					<li>
 						<strong>Revoke the API key.</strong> Use the API key tab on your
@@ -630,7 +663,8 @@ const SECTIONS: readonly LegalSection[] = [
 						<strong>Delete stored account data, or your whole account.</strong>{" "}
 						Email <ContactEmail /> from the address on the account and say which
 						stored account information you want deleted or whether you want the
-						entire account removed. We complete it within{" "}
+						entire account removed. Deleting your account also deletes any
+						stored health history. We complete it within{" "}
 						{LEGAL_RETENTION.deletionRequestDays} days and confirm when it is
 						done. Deletion is permanent; see the backup window — and the billing
 						records we are not allowed to destroy — in <Ref id="retention" />.

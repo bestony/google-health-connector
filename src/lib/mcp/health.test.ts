@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { DataPoint } from "../google-health-api.gen";
 import {
+	chooseReadSource,
 	clampHistoryWindow,
 	describeDataTypes,
 	readableCategories,
@@ -154,5 +155,96 @@ describe("health tool helpers", () => {
 		).toBe("sleep");
 		expect(scopeCategory("plain-scope")).toBe("plain-scope");
 		expect(readableCategories()).toContain("sleep");
+	});
+});
+
+describe("chooseReadSource", () => {
+	const COVERAGE = { fromMs: 100, throughMs: 900 };
+
+	it("uses the cache only for a bounded window it fully covers", () => {
+		expect(
+			chooseReadSource({
+				cacheEnabled: true,
+				coverage: COVERAGE,
+				fromMs: 200,
+				toMs: 800,
+			}),
+		).toBe("cache");
+		// Exactly the covered span still counts as covered.
+		expect(
+			chooseReadSource({
+				cacheEnabled: true,
+				coverage: COVERAGE,
+				fromMs: 100,
+				toMs: 900,
+			}),
+		).toBe("cache");
+	});
+
+	it("reads live when either end falls outside the coverage", () => {
+		expect(
+			chooseReadSource({
+				cacheEnabled: true,
+				coverage: COVERAGE,
+				fromMs: 99,
+				toMs: 800,
+			}),
+		).toBe("live");
+		expect(
+			chooseReadSource({
+				cacheEnabled: true,
+				coverage: COVERAGE,
+				fromMs: 200,
+				toMs: 901,
+			}),
+		).toBe("live");
+	});
+
+	it("reads live for an open-ended request", () => {
+		// "Up to now" asks for the newest data, which is exactly what a sync that
+		// stops at D-2 does not have.
+		expect(
+			chooseReadSource({
+				cacheEnabled: true,
+				coverage: COVERAGE,
+				fromMs: 200,
+				toMs: undefined,
+			}),
+		).toBe("live");
+	});
+
+	it("reads live without an opt-in, or with nothing synced yet", () => {
+		expect(
+			chooseReadSource({
+				cacheEnabled: false,
+				coverage: COVERAGE,
+				fromMs: 200,
+				toMs: 800,
+			}),
+		).toBe("live");
+		expect(
+			chooseReadSource({
+				cacheEnabled: true,
+				coverage: undefined,
+				fromMs: 200,
+				toMs: 800,
+			}),
+		).toBe("live");
+		expect(
+			chooseReadSource({
+				cacheEnabled: true,
+				coverage: { fromMs: null, throughMs: null },
+				fromMs: 200,
+				toMs: 800,
+			}),
+		).toBe("live");
+		expect(
+			chooseReadSource({
+				cacheEnabled: true,
+				coverage: { fromMs: 100, throughMs: null },
+				fromMs: 200,
+				toMs: 800,
+			}),
+		).toBe("live");
 	});
 });

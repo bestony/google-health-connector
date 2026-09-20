@@ -21,6 +21,8 @@ import { Route as DotwellKnownOauthAuthorizationServerIndexRouteImport } from '.
 import { Route as DotwellKnownOauthProtectedResourceIndexRouteImport } from './routes/[.]well-known/oauth-protected-resource/index'
 import { Route as DotwellKnownOauthProtectedResourceMcpRouteImport } from './routes/[.]well-known/oauth-protected-resource/mcp'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiCronStatusRouteImport } from './routes/api/cron/status'
+import { Route as ApiCronSyncRouteImport } from './routes/api/cron/sync'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -86,6 +88,16 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiCronStatusRoute = ApiCronStatusRouteImport.update({
+  id: '/api/cron/status',
+  path: '/api/cron/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiCronSyncRoute = ApiCronSyncRouteImport.update({
+  id: '/api/cron/sync',
+  path: '/api/cron/sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -98,6 +110,8 @@ export interface FileRoutesByFullPath {
   '/.well-known/openid-configuration': typeof DotwellKnownOpenidConfigurationRoute
   '/.well-known/oauth-protected-resource/mcp': typeof DotwellKnownOauthProtectedResourceMcpRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/cron/status': typeof ApiCronStatusRoute
+  '/api/cron/sync': typeof ApiCronSyncRoute
   '/.well-known/oauth-authorization-server/': typeof DotwellKnownOauthAuthorizationServerIndexRoute
   '/.well-known/oauth-protected-resource/': typeof DotwellKnownOauthProtectedResourceIndexRoute
 }
@@ -112,6 +126,8 @@ export interface FileRoutesByTo {
   '/.well-known/openid-configuration': typeof DotwellKnownOpenidConfigurationRoute
   '/.well-known/oauth-protected-resource/mcp': typeof DotwellKnownOauthProtectedResourceMcpRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/cron/status': typeof ApiCronStatusRoute
+  '/api/cron/sync': typeof ApiCronSyncRoute
   '/.well-known/oauth-authorization-server': typeof DotwellKnownOauthAuthorizationServerIndexRoute
   '/.well-known/oauth-protected-resource': typeof DotwellKnownOauthProtectedResourceIndexRoute
 }
@@ -127,6 +143,8 @@ export interface FileRoutesById {
   '/.well-known/openid-configuration': typeof DotwellKnownOpenidConfigurationRoute
   '/.well-known/oauth-protected-resource/mcp': typeof DotwellKnownOauthProtectedResourceMcpRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/cron/status': typeof ApiCronStatusRoute
+  '/api/cron/sync': typeof ApiCronSyncRoute
   '/.well-known/oauth-authorization-server/': typeof DotwellKnownOauthAuthorizationServerIndexRoute
   '/.well-known/oauth-protected-resource/': typeof DotwellKnownOauthProtectedResourceIndexRoute
 }
@@ -143,6 +161,8 @@ export interface FileRouteTypes {
     | '/.well-known/openid-configuration'
     | '/.well-known/oauth-protected-resource/mcp'
     | '/api/auth/$'
+    | '/api/cron/status'
+    | '/api/cron/sync'
     | '/.well-known/oauth-authorization-server/'
     | '/.well-known/oauth-protected-resource/'
   fileRoutesByTo: FileRoutesByTo
@@ -157,6 +177,8 @@ export interface FileRouteTypes {
     | '/.well-known/openid-configuration'
     | '/.well-known/oauth-protected-resource/mcp'
     | '/api/auth/$'
+    | '/api/cron/status'
+    | '/api/cron/sync'
     | '/.well-known/oauth-authorization-server'
     | '/.well-known/oauth-protected-resource'
   id:
@@ -171,6 +193,8 @@ export interface FileRouteTypes {
     | '/.well-known/openid-configuration'
     | '/.well-known/oauth-protected-resource/mcp'
     | '/api/auth/$'
+    | '/api/cron/status'
+    | '/api/cron/sync'
     | '/.well-known/oauth-authorization-server/'
     | '/.well-known/oauth-protected-resource/'
   fileRoutesById: FileRoutesById
@@ -186,6 +210,8 @@ export interface RootRouteChildren {
   DotwellKnownOpenidConfigurationRoute: typeof DotwellKnownOpenidConfigurationRoute
   DotwellKnownOauthProtectedResourceMcpRoute: typeof DotwellKnownOauthProtectedResourceMcpRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiCronStatusRoute: typeof ApiCronStatusRoute
+  ApiCronSyncRoute: typeof ApiCronSyncRoute
   DotwellKnownOauthAuthorizationServerIndexRoute: typeof DotwellKnownOauthAuthorizationServerIndexRoute
   DotwellKnownOauthProtectedResourceIndexRoute: typeof DotwellKnownOauthProtectedResourceIndexRoute
 }
@@ -276,6 +302,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/cron/status': {
+      id: '/api/cron/status'
+      path: '/api/cron/status'
+      fullPath: '/api/cron/status'
+      preLoaderRoute: typeof ApiCronStatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/cron/sync': {
+      id: '/api/cron/sync'
+      path: '/api/cron/sync'
+      fullPath: '/api/cron/sync'
+      preLoaderRoute: typeof ApiCronSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -291,6 +331,8 @@ const rootRouteChildren: RootRouteChildren = {
   DotwellKnownOauthProtectedResourceMcpRoute:
     DotwellKnownOauthProtectedResourceMcpRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiCronStatusRoute: ApiCronStatusRoute,
+  ApiCronSyncRoute: ApiCronSyncRoute,
   DotwellKnownOauthAuthorizationServerIndexRoute:
     DotwellKnownOauthAuthorizationServerIndexRoute,
   DotwellKnownOauthProtectedResourceIndexRoute:
