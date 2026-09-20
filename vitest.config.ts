@@ -32,6 +32,7 @@ export default defineConfig({
 				"src/lib/mcp/endpoint.ts",
 				"src/lib/mcp/auth.server.ts",
 				"src/lib/mcp/handler.server.ts",
+				"src/lib/health-sync-preference.ts",
 				"src/lib/health-sync/accounts.server.ts",
 				"src/lib/health-sync/execute.server.ts",
 				"src/lib/health-sync/handler.server.ts",
