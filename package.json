@@ -24,6 +24,7 @@
 		"test:pushdb": "npx drizzle-kit push",
 		"db:generate": "npx drizzle-kit generate",
 		"db:migrate": "tsx scripts/migrate.ts",
+		"db:roundtrip": "tsx scripts/health-cache-roundtrip.ts",
 		"db:baseline": "tsx scripts/migrate.ts --baseline",
 		"db:studio": "npx drizzle-kit studio",
 		"google-health:generate": "tsx scripts/generate-google-health-api.ts && biome check --write src/lib/google-health-api.gen.ts",
