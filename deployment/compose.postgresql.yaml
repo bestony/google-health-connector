@@ -38,6 +38,10 @@ services:
       MCP_OAUTH_ENABLED: ${MCP_OAUTH_ENABLED:-false}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      HEALTH_SYNC_ENABLED: ${HEALTH_SYNC_ENABLED:-false}
+      CRON_SECRET: ${CRON_SECRET:-}
+      HEALTH_SYNC_BUDGET_MS: ${HEALTH_SYNC_BUDGET_MS:-120000}
+      HEALTH_SYNC_BACKFILL_DAYS: ${HEALTH_SYNC_BACKFILL_DAYS:-730}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       NODE_ENV: production
       NITRO_HOST: 0.0.0.0
@@ -47,6 +51,27 @@ services:
     depends_on:
       migration:
         condition: service_completed_successfully
+    init: true
+    restart: unless-stopped
+
+  sync-cron:
+    # Pokes the app's own sync endpoint on an interval. The endpoint decides
+    # how much work one call does and holds a database lease while it runs, so
+    # this sidecar only needs to call it — overlapping calls are answered with
+    # `skipped_locked` and a 200.
+    image: curlimages/curl:8.11.1
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      # One line per command on purpose: YAML's folded scalar keeps the newline
+      # on any line indented further than the first, so a "readable" multi-line
+      # curl silently becomes several broken commands.
+      - 'while true; do curl -fsS -m 300 -X POST -H "Authorization: Bearer $$CRON_SECRET" http://app:3000/api/cron/sync > /dev/null || echo "[sync-cron] call failed"; sleep "$${SYNC_INTERVAL_SECONDS:-600}"; done'
+    environment:
+      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET is required when HEALTH_SYNC_ENABLED is true}
+      SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-600}
+    depends_on:
+      app:
+        condition: service_started
     init: true
     restart: unless-stopped
 

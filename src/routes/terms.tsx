@@ -86,6 +86,12 @@ const SECTIONS: readonly LegalSection[] = [
 						without storing a server-side copy;
 					</li>
 					<li>
+						optionally store a copy of those same categories, on a daily
+						schedule, if and only if you turn on stored history from your
+						dashboard — see the privacy policy for what is kept and for how
+						long;
+					</li>
+					<li>
 						write records back to Google Health, for the categories where you
 						granted write permission;
 					</li>
@@ -207,11 +213,11 @@ const SECTIONS: readonly LegalSection[] = [
 				<Para>
 					You grant us a limited, non-exclusive, revocable, royalty-free licence
 					to process and transmit your data solely to operate the features you
-					asked for — retrieving it live from Google, returning it to you,
-					writing back what you asked to write, and serving it to an MCP client
-					you connected. The licence exists only to make the Service work, and
-					it ends when you withdraw the applicable permission or delete your
-					account.
+					asked for — retrieving it live from Google, storing a copy of it if
+					you turned on stored history, returning it to you, writing back what
+					you asked to write, and serving it to an MCP client you connected. The
+					licence exists only to make the Service work, and it ends when you
+					withdraw the applicable permission or delete your account.
 				</Para>
 				<Para>
 					We do not use your health data to train or fine-tune machine learning
@@ -739,7 +745,8 @@ function TermsOfServicePage() {
 						These terms set out what you can expect from {LEGAL.appName} and
 						what we expect from you. They are deliberately short on ceremony:
 						the Service reads health data you already own live from Google and
-						hands it to tools you choose, without storing a server-side copy.
+						hands it to tools you choose. It keeps no copy of it unless you ask
+						it to.
 					</Para>
 					<Para>
 						Two sections matter more than the rest. Read{" "}

@@ -202,3 +202,40 @@ smoke test.
 - The app is healthy but inaccessible: check `APP_PORT`, the host firewall,
   and the reverse proxy route. The database is reachable only by its Compose
   service name.
+
+## Background health sync
+
+Optional, and off unless `HEALTH_SYNC_ENABLED=true`. It syncs each opted-in
+user's Google Health data once a day so that questions spanning more than a few
+months can be answered; see development.md → Background sync for what it does
+and why.
+
+Turning it on for the deployment does not store anyone's data. Each user opts in
+separately from the History tab on `/dashboard`, and turning that off deletes
+what was kept.
+
+Compose runs it as a `sync-cron` sidecar that pokes the app's own endpoint on an
+interval. The endpoint decides how much work one call does and holds a database
+lease while it runs, so overlapping calls are answered with `skipped_locked` and
+a 200 rather than doing the work twice.
+
+```bash
+HEALTH_SYNC_ENABLED=true
+CRON_SECRET=$(openssl rand -hex 32)
+SYNC_INTERVAL_SECONDS=600
+HEALTH_SYNC_BUDGET_MS=120000
+LOG_LEVEL=info
+```
+
+`CRON_SECRET` is required once the sync is enabled: without it both cron routes
+answer 503 rather than running unauthenticated. `LOG_LEVEL=info` is worth
+setting, because the production default of `error` hides the per-run summary.
+
+To see what it has been doing:
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/status
+```
+
+A row with `finishedAt` null and an old `startedAt` is an invocation that was
+killed — the one failure that leaves no log line.

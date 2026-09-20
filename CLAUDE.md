@@ -7,7 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A TanStack Start (React 19 + Vite + Nitro) app that turns a user's Google Health
 account into an MCP endpoint: sign in, grant health scopes, then approve an OAuth
 application or issue an API key for `POST /mcp`. Health data is read live from
-Google — no copy is stored server-side.
+Google; a copy is stored server-side only for users who opt into stored history
+on `/dashboard`, which a nightly sync then keeps up to date.
 
 `development.md` is the source of truth for behaviour and rationale; the
 sections on Database, Authentication, Google Health authorization, The API

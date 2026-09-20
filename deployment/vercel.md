@@ -106,3 +106,65 @@ are capped at `MAX_POOL_CONNECTIONS` (5) per process in `src/db/client.server.ts
 serverless multiplies that by the number of warm instances, so past a handful the answer is
 a pooler in front of the database — PgBouncer, Neon's pooled endpoint, PlanetScale — not a
 larger number. Turso is exempt: it is stateless HTTP and pools nothing.
+
+## Background health sync
+
+The sync runs as a Vercel Cron job calling this app's own endpoint. Both
+`vercel.json` entries matter and neither is optional:
+
+```json
+"crons": [{ "path": "/api/cron/sync", "schedule": "7 5 * * *" }]
+```
+
+05:07 UTC, because D-2 is settled in every timezone by then. The odd minute is
+deliberate — every project that writes `0 5` fires at the same instant.
+
+Environment variables, in Project Settings → Environment Variables:
+
+| Variable | Value |
+| --- | --- |
+| `HEALTH_SYNC_ENABLED` | `true`. Anything else, including unset, makes both cron routes answer 404. |
+| `CRON_SECRET` | A long random string. **The name matters**: Vercel attaches `Authorization: Bearer $CRON_SECRET` to its cron invocations only when a variable of exactly this name exists. |
+| `HEALTH_SYNC_BUDGET_MS` | Leave at the 8000 default on Hobby. |
+| `LOG_LEVEL` | `info`, so the two-line run summary is visible. The production default is `error`, which hides it. |
+
+Turning the switch on does not store anyone's data. Each user opts in
+separately from the History tab on `/dashboard`.
+
+### Hobby allows one cron per day, and that is the real constraint
+
+On Hobby you get a single daily invocation with a 10-second function timeout,
+which is roughly four users per night. Daily syncing keeps up at that rate for
+a handful of users; the backfill advances one chunk per user per night, so a
+year of history takes weeks rather than hours. That is a platform limit, not a
+bug, and the run log says so — `moreWork: true` on every run until the debt
+clears.
+
+On Pro, `*/10 * * * *` with `HEALTH_SYNC_BUDGET_MS` raised toward the function
+timeout is the intended configuration.
+
+Raising the budget past 10 seconds also needs the function's `maxDuration`
+raised, which is a Nitro Vercel preset option rather than a `vercel.json` one.
+Verify it against the pinned nitro version before relying on it; until then,
+treat 8000 as the Hobby ceiling.
+
+### Checking on it
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" https://<your-app>/api/cron/status
+```
+
+The last twenty runs. A row with `finishedAt` null and an old `startedAt` is an
+invocation the platform killed — the one failure that leaves no log line.
+
+```bash
+curl -H "Authorization: Bearer $CRON_SECRET" \
+  'https://<your-app>/api/cron/sync?dryRun=1'
+```
+
+What the next run *would* do. Takes no lease and writes nothing, so it is safe
+to run against production at any time.
+
+**Preview deployments inherit crons only in production.** A preview build does
+not run the sync, which is what you want given that previews may point at the
+production database.
