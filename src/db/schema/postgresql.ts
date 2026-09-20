@@ -113,3 +113,37 @@ export const healthSyncAccount = pgTable("health_sync_account", {
 		.$onUpdate(() => /* @__PURE__ */ new Date())
 		.notNull(),
 });
+
+/** The single row that serialises sync invocations. See `./sqlite.ts`. */
+export const healthSyncLease = pgTable("health_sync_lease", {
+	id: text("id").primaryKey(),
+	holder: text("holder"),
+	acquiredAt: timestamp("acquired_at"),
+	expiresAt: timestamp("expires_at"),
+	heartbeatAt: timestamp("heartbeat_at"),
+	cursorUserId: text("cursor_user_id"),
+	updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+/** What each sync invocation did. See `./sqlite.ts`. */
+export const healthSyncRun = pgTable(
+	"health_sync_run",
+	{
+		id: text("id").primaryKey(),
+		startedAt: timestamp("started_at").notNull(),
+		finishedAt: timestamp("finished_at"),
+		trigger: text("trigger").notNull(),
+		outcome: text("outcome"),
+		usersConsidered: integer("users_considered").default(0).notNull(),
+		usersTouched: integer("users_touched").default(0).notNull(),
+		tasksPlanned: integer("tasks_planned").default(0).notNull(),
+		tasksRan: integer("tasks_ran").default(0).notNull(),
+		pointsInserted: integer("points_inserted").default(0).notNull(),
+		pointsUpdated: integer("points_updated").default(0).notNull(),
+		retries: integer("retries").default(0).notNull(),
+		blocksWritten: integer("blocks_written").default(0).notNull(),
+		moreWork: boolean("more_work").default(false).notNull(),
+		error: text("error"),
+	},
+	(table) => [index("healthSyncRun_startedAt_idx").on(table.startedAt)],
+);

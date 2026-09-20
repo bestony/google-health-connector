@@ -8,6 +8,15 @@ import {
 	upsertHealthDataPoints,
 } from "../src/db/health-cache.server";
 import {
+	acquireLease,
+	finishRun,
+	heartbeatLease,
+	listRecentRuns,
+	pruneRunLog,
+	releaseLease,
+	startRun,
+} from "../src/db/health-sync-run.server";
+import {
 	clearHealthSyncFailures,
 	listEnabledHealthSyncAccounts,
 	purgeUserHealthCache,
@@ -24,6 +33,7 @@ import {
 	healthSyncStateId,
 	toHealthCacheRecord,
 } from "../src/lib/google-health-cache-record.server";
+import { LEASE_ID } from "../src/lib/health-sync/config";
 import { createLogger } from "../src/lib/logger.server";
 
 /**
@@ -377,6 +387,98 @@ async function checkPurge(): Promise<void> {
 	);
 }
 
+/**
+ * The lease's concurrency guarantee, which is the one thing here that a unit
+ * test genuinely cannot check: it depends on each engine's row locking and on
+ * how its driver reports an UPDATE that matched nothing.
+ */
+async function checkLease(): Promise<void> {
+	const id = `roundtrip_${Date.now()}`;
+	const now = new Date();
+
+	// Nothing to take: acquire only ever updates a row the migration seeded.
+	const missing = await acquireLease(id, 30_000, now);
+	assert.equal(missing.acquired, false, "a lease with no row cannot be taken");
+
+	const first = await acquireLease(LEASE_ID, 30_000, now);
+	assert.ok(first.acquired, "the seeded lease can be taken");
+	if (!first.acquired) return;
+
+	const second = await acquireLease(LEASE_ID, 30_000, now);
+	assert.equal(second.acquired, false, "a held lease cannot be taken twice");
+	assert.ok(second.heldUntil, "the loser is told when it may retry");
+
+	assert.equal(
+		await heartbeatLease(LEASE_ID, first.token, 30_000, now),
+		true,
+		"the holder can extend its own lease",
+	);
+	assert.equal(
+		await heartbeatLease(LEASE_ID, "not-the-holder", 30_000, now),
+		false,
+		"a stale invocation cannot extend a lease it no longer holds",
+	);
+
+	// The fencing token: a zombie release must not clear the real holder or
+	// overwrite its cursor.
+	await releaseLease(LEASE_ID, "not-the-holder", "wrong-user", now);
+	assert.equal(
+		await heartbeatLease(LEASE_ID, first.token, 30_000, now),
+		true,
+		"a zombie release left the real holder in place",
+	);
+
+	await releaseLease(LEASE_ID, first.token, USER, now);
+	const third = await acquireLease(LEASE_ID, 30_000, now);
+	assert.ok(third.acquired, "a released lease can be taken again");
+	assert.equal(
+		third.cursorUserId,
+		USER,
+		"the rotation cursor survives release and re-acquire",
+	);
+
+	// An expired lease is takeable without anyone cleaning it up.
+	const later = new Date(now.getTime() + 60_000);
+	const fourth = await acquireLease(LEASE_ID, 30_000, later);
+	assert.ok(fourth.acquired, "an expired lease is taken by the next caller");
+	if (fourth.acquired) {
+		await releaseLease(LEASE_ID, fourth.token, undefined, later);
+	}
+}
+
+async function checkRunLog(): Promise<void> {
+	const runId = `rt_${Date.now()}`;
+	const startedAt = new Date();
+
+	await startRun({ id: runId, startedAt, trigger: "manual" });
+	const opened = (await listRecentRuns(5)).find((row) => row.id === runId);
+	assert.ok(opened, "the run row is written before any work happens");
+	assert.equal(
+		opened?.finishedAt,
+		null,
+		"an open run has no finish time — the signature of a killed invocation",
+	);
+
+	const finishedAt = new Date(startedAt.getTime() + 1_000);
+	await finishRun(runId, {
+		finishedAt,
+		moreWork: true,
+		outcome: "partial",
+		pointsInserted: 7,
+		tasksRan: 2,
+	});
+	const closed = (await listRecentRuns(5)).find((row) => row.id === runId);
+	assert.equal(closed?.outcome, "partial", "the outcome is patched in");
+	assert.equal(closed?.pointsInserted, 7, "counters are patched in");
+	assert.equal(closed?.moreWork, true, "a boolean survives the patch");
+
+	await pruneRunLog(new Date(startedAt.getTime() + 60_000));
+	assert.ok(
+		!(await listRecentRuns(50)).some((row) => row.id === runId),
+		"the retention sweep removes old runs",
+	);
+}
+
 async function main(): Promise<void> {
 	const handle = getDb();
 	log.info("round-trip started", { dialect: handle.dialect, userId: USER });
@@ -389,6 +491,8 @@ async function main(): Promise<void> {
 		await checkSyncState();
 		await checkAccount();
 		await checkPurge();
+		await checkLease();
+		await checkRunLog();
 	} finally {
 		// Cascades the account row away with it, which is also worth exercising.
 		await removeOwner();

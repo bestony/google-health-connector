@@ -21,6 +21,9 @@ export const LOG_LEVELS = ["debug", "info", "warn", "error"] as const;
 
 export type LogLevel = (typeof LOG_LEVELS)[number];
 
+/** Commas or whitespace, for the one list-valued variable. */
+const LIST_SEPARATOR = /[\s,]+/;
+
 const DEFAULT_AUTH_BASE_URL = "http://localhost:3000";
 const AUTH_IN_URL_PATTERN = /(:\/\/[^:/?#@]+):[^@]*@/;
 const AUTH_QUERY_PARAMETER_PATTERN =
@@ -119,6 +122,102 @@ export function getAuthBaseUrl(): string {
  */
 export function isMcpOAuthEnabled(): boolean {
 	return read("MCP_OAUTH_ENABLED")?.toLowerCase() === "true";
+}
+
+/**
+ * Whether this deployment runs the scheduled Google Health sync.
+ *
+ * Missing and unrecognized values fail closed, for the same reason
+ * `isMcpOAuthEnabled()` does — and with more at stake. The sync calls Google on
+ * behalf of every opted-in user without anybody asking it to, and it writes to
+ * cache tables that a not-yet-migrated deployment does not have. Only an
+ * explicit `true` turns it on; until then the cron routes answer 404.
+ */
+export function isHealthSyncEnabled(): boolean {
+	return read("HEALTH_SYNC_ENABLED")?.toLowerCase() === "true";
+}
+
+/**
+ * The shared secret the scheduler authenticates with, or why it is unusable.
+ *
+ * Named `CRON_SECRET` rather than something this app chose, because Vercel
+ * attaches `Authorization: Bearer $CRON_SECRET` to its own cron invocations
+ * when — and only when — a variable of exactly that name exists on the project.
+ * Renaming it would mean hand-rolling the header on the one platform that
+ * already provides it.
+ *
+ * The `unconfigured` variant exists so that an enabled-but-secretless
+ * deployment refuses with a 503 naming the variable, rather than either running
+ * unauthenticated or looking like a route that was never deployed.
+ */
+export type CronSecretConfig =
+	| { status: "configured"; secret: string }
+	| { status: "unconfigured"; missing: string[] };
+
+export function getCronSecretConfig(): CronSecretConfig {
+	const secret = read("CRON_SECRET");
+	return secret === undefined
+		? { status: "unconfigured", missing: ["CRON_SECRET"] }
+		: { status: "configured", secret };
+}
+
+/** Clamps a numeric variable, falling back when it is missing or unreadable. */
+function readNumber(
+	name: string,
+	fallback: number,
+	min: number,
+	max: number,
+): number {
+	const raw = read(name);
+	if (raw === undefined) return fallback;
+	const value = Number(raw);
+	if (!Number.isFinite(value)) return fallback;
+	return Math.min(max, Math.max(min, Math.trunc(value)));
+}
+
+/**
+ * The wall-clock budget for one sync invocation.
+ *
+ * Must sit under the platform's function timeout with room for the run to
+ * finish its own bookkeeping — the default is 8 seconds because Vercel's Hobby
+ * tier kills a function at 10. Self-hosted deployments have no such ceiling and
+ * should raise it; `deployment/` says so.
+ */
+export function getHealthSyncBudgetMs(): number {
+	return readNumber("HEALTH_SYNC_BUDGET_MS", 8_000, 1_000, 600_000);
+}
+
+/**
+ * How far back the backfill may reach, in days.
+ *
+ * Two years by default. This is also the history a cached MCP read may serve:
+ * data the sync never fetched cannot be read from the cache, so the floor and
+ * the read window are the same number by construction rather than by
+ * coincidence.
+ *
+ * A user's `Profile.membershipStartDate` overrides it when that is more recent,
+ * because there is nothing older than that to fetch.
+ */
+export function getHealthSyncBackfillDays(): number {
+	return readNumber("HEALTH_SYNC_BACKFILL_DAYS", 730, 1, 3_650);
+}
+
+/**
+ * Data types to sync, or empty for all of them.
+ *
+ * An escape hatch for an operator who wants a smaller sync, not a place to
+ * encode which types a user can read — that is discovered by probing, because
+ * Google publishes no mapping from data types onto consent categories.
+ * Unrecognized ids are dropped downstream rather than rejected here, so a
+ * typo narrows the sync instead of breaking start-up.
+ */
+export function getHealthSyncDataTypes(): string[] {
+	const raw = read("HEALTH_SYNC_DATA_TYPES");
+	if (raw === undefined) return [];
+	return raw
+		.split(LIST_SEPARATOR)
+		.map((entry) => entry.trim())
+		.filter((entry) => entry.length > 0);
 }
 
 /**

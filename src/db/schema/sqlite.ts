@@ -175,3 +175,70 @@ export const healthSyncAccount = sqliteTable("health_sync_account", {
 		.$onUpdate(() => /* @__PURE__ */ new Date())
 		.notNull(),
 });
+
+/**
+ * The single row that serialises sync invocations.
+ *
+ * A lease rather than a transaction: `SELECT ... FOR UPDATE` has no SQLite
+ * equivalent and would hold a transaction open for a whole invocation, which is
+ * the long-lived work this architecture avoids, and advisory locks are
+ * PostgreSQL-only. A conditional UPDATE against an expiring row is three lines
+ * of Drizzle on all three engines and holds nothing open between steps.
+ *
+ * `holder` is an unforgeable fencing token. Release and heartbeat both match on
+ * it, so a stalled invocation whose lease expired and was taken by someone else
+ * cannot come back and clobber the new holder's cursor.
+ *
+ * `id` is a primary key so that sharding later — `shard-0`, `shard-1` — is a
+ * configuration change rather than a migration. One row, seeded by the
+ * migration, is what lets acquire be a plain UPDATE with no upsert.
+ */
+export const healthSyncLease = sqliteTable("health_sync_lease", {
+	id: text("id").primaryKey(),
+	/** 32 hex characters while held, null while free. */
+	holder: text("holder"),
+	acquiredAt: integer("acquired_at", { mode: "timestamp_ms" }),
+	expiresAt: integer("expires_at", { mode: "timestamp_ms" }),
+	heartbeatAt: integer("heartbeat_at", { mode: "timestamp_ms" }),
+	/** The rotation resumes after this user, so nobody is starved. */
+	cursorUserId: text("cursor_user_id"),
+	updatedAt: integer("updated_at", { mode: "timestamp_ms" })
+		.default(sql`(cast(unixepoch('subsecond') * 1000 as integer))`)
+		.notNull(),
+});
+
+/**
+ * What each sync invocation did.
+ *
+ * Logs are the wrong answer to "did last night's sync run": production defaults
+ * `LOG_LEVEL` to `error` and a serverless platform's log retention is short. A
+ * row per run is durable, queryable and one authenticated `curl` away through
+ * `GET /api/cron/status`.
+ *
+ * A row with `finished_at` still null and an old `started_at` is the signature
+ * of an invocation the platform killed — which is otherwise invisible, because
+ * a killed process writes no log line saying so.
+ */
+export const healthSyncRun = sqliteTable(
+	"health_sync_run",
+	{
+		id: text("id").primaryKey(),
+		startedAt: integer("started_at", { mode: "timestamp_ms" }).notNull(),
+		finishedAt: integer("finished_at", { mode: "timestamp_ms" }),
+		trigger: text("trigger").notNull(),
+		outcome: text("outcome"),
+		usersConsidered: integer("users_considered").default(0).notNull(),
+		usersTouched: integer("users_touched").default(0).notNull(),
+		tasksPlanned: integer("tasks_planned").default(0).notNull(),
+		tasksRan: integer("tasks_ran").default(0).notNull(),
+		pointsInserted: integer("points_inserted").default(0).notNull(),
+		pointsUpdated: integer("points_updated").default(0).notNull(),
+		retries: integer("retries").default(0).notNull(),
+		blocksWritten: integer("blocks_written").default(0).notNull(),
+		moreWork: integer("more_work", { mode: "boolean" })
+			.default(false)
+			.notNull(),
+		error: text("error"),
+	},
+	(table) => [index("healthSyncRun_startedAt_idx").on(table.startedAt)],
+);

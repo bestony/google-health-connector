@@ -127,3 +127,37 @@ export const healthSyncAccount = mysqlTable("health_sync_account", {
 		.$onUpdate(() => /* @__PURE__ */ new Date())
 		.notNull(),
 });
+
+/** The single row that serialises sync invocations. See `./sqlite.ts`. */
+export const healthSyncLease = mysqlTable("health_sync_lease", {
+	id: varchar("id", { length: 32 }).primaryKey(),
+	holder: varchar("holder", { length: 32 }),
+	acquiredAt: timestamp("acquired_at", { fsp: 3 }),
+	expiresAt: timestamp("expires_at", { fsp: 3 }),
+	heartbeatAt: timestamp("heartbeat_at", { fsp: 3 }),
+	cursorUserId: varchar("cursor_user_id", { length: 36 }),
+	updatedAt: timestamp("updated_at", { fsp: 3 }).defaultNow().notNull(),
+});
+
+/** What each sync invocation did. See `./sqlite.ts`. */
+export const healthSyncRun = mysqlTable(
+	"health_sync_run",
+	{
+		id: varchar("id", { length: 32 }).primaryKey(),
+		startedAt: timestamp("started_at", { fsp: 3 }).notNull(),
+		finishedAt: timestamp("finished_at", { fsp: 3 }),
+		trigger: varchar("trigger", { length: 16 }).notNull(),
+		outcome: varchar("outcome", { length: 32 }),
+		usersConsidered: int("users_considered").default(0).notNull(),
+		usersTouched: int("users_touched").default(0).notNull(),
+		tasksPlanned: int("tasks_planned").default(0).notNull(),
+		tasksRan: int("tasks_ran").default(0).notNull(),
+		pointsInserted: int("points_inserted").default(0).notNull(),
+		pointsUpdated: int("points_updated").default(0).notNull(),
+		retries: int("retries").default(0).notNull(),
+		blocksWritten: int("blocks_written").default(0).notNull(),
+		moreWork: boolean("more_work").default(false).notNull(),
+		error: text("error"),
+	},
+	(table) => [index("healthSyncRun_startedAt_idx").on(table.startedAt)],
+);
