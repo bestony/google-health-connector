@@ -109,44 +109,66 @@ larger number. Turso is exempt: it is stateless HTTP and pools nothing.
 
 ## Background health sync
 
-The sync runs as a Vercel Cron job calling this app's own endpoint. Both
-`vercel.json` entries matter and neither is optional:
+The sync runs as a Vercel Cron job calling this app's own endpoint.
 
-```json
-"crons": [{ "path": "/api/cron/sync", "schedule": "7 5 * * *" }]
+**The schedule lives in `vite.config.ts`, not in `vercel.json`.** Nitro builds
+this app through the Build Output API and writes `.vercel/output/config.json`
+itself; it does not merge the repository's `vercel.json` into that file. A
+`crons` block in `vercel.json` would therefore be a schedule that looks
+configured and may never fire, which is the worst failure available to a job
+nobody watches. Nitro's `vercel.config` passes straight through:
+
+```ts
+nitro({
+  vercel: {
+    config: {
+      version: 3,
+      crons: [{ path: "/api/cron/sync", schedule: "*/10 * * * *" }],
+    },
+    functions: { maxDuration: 60 },
+  },
+})
 ```
 
-05:07 UTC, because D-2 is settled in every timezone by then. The odd minute is
-deliberate — every project that writes `0 5` fires at the same instant.
+Confirm it after any change to that block:
 
-Environment variables, in Project Settings → Environment Variables:
+```bash
+NITRO_PRESET=vercel pnpm build
+cat .vercel/output/config.json   # must contain your crons entry
+```
+
+Every ten minutes, which assumes **Vercel Pro**. The daily work needs one run a
+day, but the backfill advances one chunk per user per invocation, so the
+interval is what decides whether years of history take days or months. A run
+that finds nothing owed costs one `idle` row.
+
+`maxDuration` is app-wide rather than per-route because Nitro deploys the whole
+app as a single function — the generated output routes `/(.*)` to one
+`__server`. A ceiling costs nothing on its own; Vercel bills actual duration. 60
+is Pro's default maximum; Pro allows raising it to 300, and
+`HEALTH_SYNC_BUDGET_MS` must always stay below whatever it is set to, or the
+platform kills a run while it is writing its own bookkeeping.
+
+### Environment variables
 
 | Variable | Value |
 | --- | --- |
 | `HEALTH_SYNC_ENABLED` | `true`. Anything else, including unset, makes both cron routes answer 404. |
 | `CRON_SECRET` | A long random string. **The name matters**: Vercel attaches `Authorization: Bearer $CRON_SECRET` to its cron invocations only when a variable of exactly this name exists. |
-| `HEALTH_SYNC_BUDGET_MS` | Leave at the 8000 default on Hobby. |
+| `HEALTH_SYNC_BUDGET_MS` | `50000` on Pro, comfortably under the 60-second ceiling. |
 | `LOG_LEVEL` | `info`, so the two-line run summary is visible. The production default is `error`, which hides it. |
 
 Turning the switch on does not store anyone's data. Each user opts in
 separately from the History tab on `/dashboard`.
 
-### Hobby allows one cron per day, and that is the real constraint
+### On Hobby instead
 
-On Hobby you get a single daily invocation with a 10-second function timeout,
-which is roughly four users per night. Daily syncing keeps up at that rate for
-a handful of users; the backfill advances one chunk per user per night, so a
-year of history takes weeks rather than hours. That is a platform limit, not a
-bug, and the run log says so — `moreWork: true` on every run until the debt
-clears.
-
-On Pro, `*/10 * * * *` with `HEALTH_SYNC_BUDGET_MS` raised toward the function
-timeout is the intended configuration.
-
-Raising the budget past 10 seconds also needs the function's `maxDuration`
-raised, which is a Nitro Vercel preset option rather than a `vercel.json` one.
-Verify it against the pinned nitro version before relying on it; until then,
-treat 8000 as the Hobby ceiling.
+Hobby allows a single cron per day and a 10-second function timeout, which is
+roughly four users a night. Daily syncing keeps up at that rate for a handful of
+users; the backfill advances one chunk per user per night, so a year of history
+takes weeks. Use `"0 5 * * *"` and leave `HEALTH_SYNC_BUDGET_MS` at its 8000
+default. The run log says what is happening — `moreWork: true` on every run
+until the debt clears.
 
 ### Checking on it
 

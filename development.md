@@ -967,6 +967,12 @@ budget share live in `src/lib/health-sync/config.ts` with their reasoning, for
 the same argument `api-key-config.ts` makes about `API_KEY_RATE_LIMIT`: each one
 needs a paragraph and a unit test far more than it needs a deployment-time knob.
 
+On Vercel, `HEALTH_SYNC_BUDGET_MS` must stay below the function's
+`maxDuration`, which `vite.config.ts` sets through Nitro's Vercel options — and
+the cron schedule lives there too, because Nitro writes
+`.vercel/output/config.json` itself and does not merge `vercel.json` into it.
+`deployment/vercel.md` has the detail and the command to verify it.
+
 Five things genuinely vary by deployment and are environment variables:
 `HEALTH_SYNC_ENABLED`, `CRON_SECRET`, `HEALTH_SYNC_BUDGET_MS`,
 `HEALTH_SYNC_BACKFILL_DAYS` and `HEALTH_SYNC_DATA_TYPES`.
