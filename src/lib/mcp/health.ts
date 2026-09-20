@@ -67,6 +67,51 @@ export function clampHistoryWindow(
 	};
 }
 
+/** Where a read's data came from, which the reply names so a model can tell. */
+export type HealthReadSource = "cache" | "live";
+
+export interface CachedCoverage {
+	fromMs: number | null;
+	throughMs: number | null;
+}
+
+export interface ReadSourceInput {
+	/** The window after clamping, with `to` resolved to an instant. */
+	fromMs: number;
+	toMs: number | undefined;
+	/** The user opted into storing history and this type is not blocked. */
+	cacheEnabled: boolean;
+	coverage: CachedCoverage | undefined;
+}
+
+/**
+ * Whether a read can be answered from the cache.
+ *
+ * Three conditions, all required. The user must have opted in; the request must
+ * name an upper bound; and the cache must cover the window *completely*.
+ *
+ * The upper bound matters more than it looks. A request with no `to` means
+ * "up to now", and the sync deliberately stops at D-2 because a more recent day
+ * is still settling — so an open-ended request can never be fully covered and
+ * must go to Google. That is the right answer rather than a limitation to work
+ * around: the open-ended question is asking for the newest data, which is
+ * exactly what the cache does not have.
+ *
+ * Total containment rather than overlap, for the same reason `coversWindow`
+ * insists on it: a partially covered window served from cache looks to the
+ * caller like a complete answer that happens to be short, which is a wrong
+ * answer rather than a slow one.
+ */
+export function chooseReadSource(input: ReadSourceInput): HealthReadSource {
+	if (!input.cacheEnabled) return "live";
+	if (input.toMs === undefined) return "live";
+	const { coverage } = input;
+	if (coverage === undefined) return "live";
+	const { fromMs, throughMs } = coverage;
+	if (fromMs === null || throughMs === null) return "live";
+	return fromMs <= input.fromMs && throughMs >= input.toMs ? "cache" : "live";
+}
+
 /** One data point, flattened to what an assistant can reason about. */
 export interface DataPointSummary {
 	/** The data type's key on `DataPoint`, e.g. `steps`. */
