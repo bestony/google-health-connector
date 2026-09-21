@@ -10,6 +10,9 @@ import {
 	type Operation,
 	type PairedDevice,
 	type Profile,
+	type RollUpDataPointsRequest,
+	type RollUpDataPointsResponse,
+	type RollupDataPoint,
 	type Settings,
 } from "./google-health-api.gen";
 import {
@@ -17,6 +20,7 @@ import {
 	dataPointTimeFilter,
 	type TimeRange,
 } from "./google-health-filter";
+import { rollupWindowSize } from "./google-health-rollup";
 import {
 	type GoogleHealthAccessToken,
 	getGoogleHealthAccessToken,
@@ -108,6 +112,15 @@ export interface ListDataPointsOptions extends TimeRange {
 	filter?: string;
 }
 
+export interface RollUpDataPointsOptions {
+	/** Inclusive start of the range. Windows are drawn from here. */
+	from: Date;
+	/** Exclusive end of the range. */
+	to: Date;
+	/** Length of one aggregation window, in milliseconds. At least a second. */
+	windowMs: number;
+}
+
 export interface GoogleHealthClientOptions {
 	/**
 	 * Scopes to check before the first call. Left empty, an unauthorized call
@@ -147,6 +160,19 @@ export interface GoogleHealthClient {
 		id: GoogleHealthDataTypeId,
 		options?: ListDataPointsOptions & { limit?: number },
 	): Promise<DataPoint[]>;
+	/**
+	 * Google's own aggregate of `id` over fixed windows, reconciled across data
+	 * sources and following pagination.
+	 *
+	 * `id` is a plain string because two rollup types (`total-calories`,
+	 * `calories-in-heart-rate-zone`) exist only as rollups and are not in the
+	 * data point catalog. The range limit per request is the caller's to respect
+	 * — see `rollupSlices()` in `google-health-rollup.ts`.
+	 */
+	rollUpDataPoints(
+		id: string,
+		options: RollUpDataPointsOptions,
+	): Promise<RollupDataPoint[]>;
 	getDataPoint(name: string): Promise<DataPoint>;
 	createDataPoint(
 		id: GoogleHealthDataTypeId,
@@ -189,6 +215,64 @@ export interface GoogleHealthClient {
 
 /** Default page size for the paginating helpers. The API's own default. */
 const DEFAULT_PAGE_SIZE = 1440;
+
+/** The most windows `rollUp` returns in a page; Google truncates above it. */
+const MAX_ROLLUP_PAGE_SIZE = 10_000;
+
+/**
+ * `dataPoints.rollUp`, following pagination.
+ *
+ * Outside the factory because it needs nothing from it but `request` — which
+ * also keeps the factory a list of endpoints rather than a place logic grows.
+ */
+async function rollUpDataPoints(
+	request: GoogleHealthClient["request"],
+	id: string,
+	rollUpOptions: RollUpDataPointsOptions,
+): Promise<RollupDataPoint[]> {
+	const windows = Math.ceil(
+		(rollUpOptions.to.getTime() - rollUpOptions.from.getTime()) /
+			rollUpOptions.windowMs,
+	);
+	const points: RollupDataPoint[] = [];
+	let pageToken: string | undefined;
+	let pages = 0;
+
+	do {
+		const body: RollUpDataPointsRequest = {
+			// One page per request in the normal case: asking for exactly the
+			// windows the range holds is what keeps a rollup to a single call.
+			pageSize: Math.min(Math.max(windows, 1), MAX_ROLLUP_PAGE_SIZE),
+			pageToken,
+			range: {
+				endTime: rollUpOptions.to.toISOString(),
+				startTime: rollUpOptions.from.toISOString(),
+			},
+			windowSize: rollupWindowSize(rollUpOptions.windowMs),
+		};
+		// Sequential for the same reason `iterateDataPoints` is: the next page
+		// token only exists once this page has answered.
+		// biome-ignore lint/performance/noAwaitInLoops: nextPageToken requires ordered requests
+		const page = await request<RollUpDataPointsResponse>(
+			"POST",
+			`users/me/dataTypes/${encodeURIComponent(id)}/dataPoints:rollUp`,
+			{ body },
+		);
+		pages += 1;
+		points.push(...(page.rollupDataPoints ?? []));
+
+		const next = page.nextPageToken;
+		pageToken = next && next !== pageToken ? next : undefined;
+	} while (pageToken !== undefined);
+
+	log.debug("rolled up data points", {
+		id,
+		pages,
+		windowMs: rollUpOptions.windowMs,
+		windows: points.length,
+	});
+	return points;
+}
 
 export function createGoogleHealthClient(
 	options: GoogleHealthClientOptions = {},
@@ -341,6 +425,8 @@ export function createGoogleHealthClient(
 	return {
 		listDataPoints,
 		iterateDataPoints,
+		rollUpDataPoints: (id, rollUpOptions) =>
+			rollUpDataPoints(request, id, rollUpOptions),
 
 		async collectDataPoints(id, collectOptions = {}) {
 			const { limit, ...rest } = collectOptions;
