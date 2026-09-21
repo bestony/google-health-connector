@@ -539,6 +539,7 @@ Streamable HTTP transport, so any MCP client can read the user's Google Health d
 | ---- | --------- | ------- |
 | `list_health_data_types` | none | The 40 queryable data types, how each is timed, and which consent categories are readable at all |
 | `read_health_data` | `dataType`, `from`, `to`, `limit` | Summarised data points, with `truncated` and whether the history window was clamped |
+| `aggregate_health_data` | `dataType`, `granularity`, `from`, `to`, `utcOffsetMinutes` | Hourly or daily buckets, with `method` saying who did the arithmetic — see [Aggregation](#aggregation) |
 | `get_health_profile` | none | Profile and settings — date of birth, height, biological sex, units |
 
 Two limits are worth knowing before you wire a client up.
@@ -565,6 +566,10 @@ granted, and the dashboard URL to change it.
 | File                           | Role                                                              |
 | ------------------------------ | ----------------------------------------------------------------- |
 | `src/lib/mcp/health.ts`        | Domain logic — clamping, summarising, the catalog. No MCP or HTTP types |
+| `src/lib/mcp/aggregate.ts`     | Bucketing, per-field statistics and cross-device reconciliation — pure |
+| `src/lib/google-health-rollup.ts` | Which types Google can roll up, and its range limit per request — pure data |
+| `src/lib/mcp/aggregate-tool.server.ts` | `aggregate_health_data`: picks stored history, Google's rollup or raw points |
+| `src/lib/mcp/tool-support.server.ts` | What every tool shares: result shapes, scope refusal, Google error copy, the cache lookup |
 | `src/lib/mcp/server.ts`        | `createMcpServer(identity)` — which tools and resources are exposed, and who may invoke them |
 | `src/lib/mcp/oauth-scopes.ts`  | Canonical issuer, resource, audiences and scope sets — pure data      |
 | `src/lib/mcp/oauth-metadata.ts` | Public discovery response and CORS policy                             |
@@ -573,6 +578,62 @@ granted, and the dashboard URL to change it.
 | `src/lib/mcp/handler.server.ts` | `Request` → `Response` bridge: transport, logging, teardown        |
 | `src/lib/mcp/endpoint.ts`      | Server-derived OAuth and API-key connection commands for the dashboard |
 | `src/routes/mcp.ts`            | The route itself                                                   |
+
+### Aggregation
+
+Raw health data is minute-level: a day of heart rate is about two thousand points and
+`read_health_data` returns at most five hundred. The questions an assistant is actually asked
+— daily steps this month, whether a resting pulse is drifting — are about hours and days, so
+`aggregate_health_data` answers in buckets instead.
+
+An aggregate comes from one of three places, tried in this order, and the reply's `source` and
+`method` say which:
+
+| `source` | `method` | When | `values` |
+| --- | --- | --- | --- |
+| `cache` | `computed` | The user stores history and it covers the whole window — the same rule `read_health_data` applies | `{ field: { sum, avg, min, max } }` |
+| `live` | `google-rollup` | Google's `dataPoints.rollUp` supports the type | Google's own fields, e.g. `countSum`, `beatsPerMinuteAvg` |
+| `live` | `computed` | Everything else — sleep, daily summaries, most clinical samples | `{ field: { sum, avg, min, max } }` |
+
+**Why Google's rollup when it exists.** Two reasons, either sufficient. It reconciles across
+data sources before summing, so a walk counted by a phone and a watch is one walk. And it
+aggregates server-side: a fortnight of heart rate is some thirty thousand points across twenty
+sequential pages, which does not fit in a ten-second serverless function. The types it covers
+are listed in `google-health-rollup.ts`, keyed by `keyof RollupDataPoint` so that a regeneration
+which adds or removes one fails `tsc`. Google caps a request at 14 days for the four dense
+types and 90 for the rest; `rollupSlices()` cuts a longer window on bucket boundaries and the
+slices are fetched in parallel.
+
+Two types — `total-calories` and `calories-in-heart-rate-zone` — exist *only* as rollups.
+There is no raw collection behind them, so they are absent from the data point catalog and
+`list_health_data_types` lists them separately as `aggregateOnlyDataTypes`.
+
+**The computed path cannot overcount.** `dataPoints.list` and the cache both hold every
+source's points, so a plain `SUM` doubles whatever two devices both saw. `aggregatePoints()`
+cuts the window into slots — an hour; a day for sessions and daily summaries — and within each
+counts only the source that recorded the most. Slots then merge into buckets, so a day is the
+sum of its reconciled hours, which keeps the steps taken while the watch was charging. It is an
+approximation of what Google does, and it errs low rather than high on purpose: an undercounted
+hour is a slightly small number, a doubled day is a wrong conclusion about someone's health.
+
+Statistics are generic rather than per type: every numeric leaf of the measurement gets
+`sum`/`avg`/`min`/`max`, with int64 strings and `"3.5s"` durations read as numbers. The caller
+picks the one that fits — the tool's note says how — for the same reason `summarizeDataPoint`
+passes measurements through: forty hand-written extractors would be forty things to keep in
+step with Google.
+
+**Every bucket is whole.** The requested range is widened *outward* to bucket boundaries, and a
+start clamped by the history limit is moved *forward* to the next one. A partial bucket is a
+wrong number that looks like a right one. For the same reason a window holding more raw points
+than the tool will read (50,000 stored, 5,000 live) is refused rather than truncated, and one
+spanning more than 366 buckets is refused rather than shortened.
+
+**Buckets are drawn at a fixed UTC offset**, `utcOffsetMinutes`, not in an IANA zone. That
+misplaces one hour on the two days a year a zone changes its clocks. In exchange every bucket
+has the same length and the same boundaries can be handed to `rollUp`, whose windows are
+physical time too — so the three paths agree on where a day starts. Daily summary types ignore
+the offset: they are already keyed by the user's calendar date. Sleep is counted on the day it
+ended, as it is in a filter and in the cache.
 
 ### Who may do what
 

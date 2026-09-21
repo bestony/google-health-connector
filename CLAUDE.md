@@ -185,6 +185,9 @@ makes the route correct on serverless).
 
 ```
 src/lib/mcp/health.ts         domain logic — clamping, summarising, the catalog. No MCP/HTTP types
+src/lib/mcp/aggregate.ts      bucketing, per-field statistics, cross-device reconciliation — pure
+src/lib/mcp/aggregate-tool.server.ts  aggregate_health_data: stored history, Google rollUp, or raw points
+src/lib/mcp/tool-support.server.ts    what every tool shares: results, scope refusal, cache lookup
 src/lib/mcp/server.ts         createMcpServer(identity): which tools exist, who may invoke them
 src/lib/mcp/oauth-scopes.ts   canonical issuer, resource, audiences and scope sets — pure data
 src/lib/mcp/oauth-metadata.ts public discovery response policy — pure response construction
@@ -197,9 +200,10 @@ src/lib/oauth-grants.ts       session-bound grant listing and revocation orchest
 src/routes/mcp.ts             the route
 ```
 
-Adding a tool: write it as a plain function in `health.ts` (or a sibling), then
-register it in `createMcpServer()`. Keeping logic out of the registration is what
-lets it be tested without a transport.
+Adding a tool: write it as a plain function in `health.ts` (or a sibling), put any
+orchestration in its own `*-tool.server.ts`, then register it in
+`createMcpServer()`. Keeping logic out of the registration is what lets it be
+tested without a transport.
 
 Every `/mcp` request authenticates, including `initialize` and `tools/list`. A
 request with no credential gets a `401` OAuth challenge. OAuth credential failures
@@ -235,7 +239,8 @@ Use disclosure, and never bypass per-application consent. Cross-references use
   committing; `google-health-api.gen.ts` is formatted by its own generate script.
 - Log through `createLogger(scope)` (`logger.server.ts` / `logger-client.ts`), never
   bare `console`. `LOG_LEVEL` defaults to `debug` outside production and `error` in it;
-  useful scopes when debugging: `google-health:api`, `mcp:handler`, `mcp:server`, `db`.
+  useful scopes when debugging: `google-health:api`, `mcp:handler`, `mcp:server`,
+  `mcp:aggregate`, `db`.
   In the browser: `localStorage.setItem('app:logLevel', 'debug')`.
 - Connection strings go through `redactConnectionString()` before reaching a log line.
 - Rotating `BETTER_AUTH_SECRET` invalidates sessions and signed OAuth continuations,

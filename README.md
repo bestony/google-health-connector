@@ -43,12 +43,13 @@ claude mcp add --transport http ghealth https://www.stillwarm.app/mcp \
   --header "Authorization: Bearer $GHEALTH_API_KEY"
 ```
 
-The hosted endpoint exposes three tools:
+The hosted endpoint exposes four tools:
 
 | Tool | Arguments | Returns |
 | ---- | --------- | ------- |
 | `list_health_data_types` | none | Queryable data types, timing, and which consent categories are readable |
 | `read_health_data` | `dataType`, `from`, `to`, `limit` | Summarised data points, with `truncated` and whether the history window was clamped |
+| `aggregate_health_data` | `dataType`, `granularity`, `from`, `to`, `utcOffsetMinutes` | Hourly or daily buckets — daily steps, hourly heart rate, minutes asleep per night — reconciled across devices |
 | `get_health_profile` | none | Profile and settings — date of birth, height, biological sex, units |
 
 See [MCP server](development.md#mcp-server) for authentication, scopes, and the
