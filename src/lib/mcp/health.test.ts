@@ -3,6 +3,7 @@ import type { DataPoint } from "../google-health-api.gen";
 import {
 	chooseReadSource,
 	clampHistoryWindow,
+	describeAggregateOnlyTypes,
 	describeDataTypes,
 	readableCategories,
 	scopeCategory,
@@ -155,6 +156,18 @@ describe("health tool helpers", () => {
 		).toBe("sleep");
 		expect(scopeCategory("plain-scope")).toBe("plain-scope");
 		expect(readableCategories()).toContain("sleep");
+	});
+
+	it("says how each type aggregates, and lists the aggregate-only ones", () => {
+		const byId = new Map(describeDataTypes().map((type) => [type.id, type]));
+		expect(byId.get("steps")?.aggregation).toBe("google-rollup");
+		expect(byId.get("sleep")?.aggregation).toBe("computed");
+		// Derived by Google, so absent from the raw catalog and listed apart.
+		expect(byId.has("total-calories")).toBe(false);
+		expect(describeAggregateOnlyTypes()).toEqual([
+			"calories-in-heart-rate-zone",
+			"total-calories",
+		]);
 	});
 });
 

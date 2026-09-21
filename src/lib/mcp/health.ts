@@ -3,6 +3,10 @@ import {
 	GOOGLE_HEALTH_DATA_POINT_TYPES,
 	GOOGLE_HEALTH_READ_SCOPES,
 } from "../google-health-api.gen";
+import {
+	GOOGLE_HEALTH_ROLLUP_TYPES,
+	googleHealthRollupType,
+} from "../google-health-rollup";
 import { FREE_HISTORY_DAYS } from "../plans";
 
 /**
@@ -200,6 +204,11 @@ export interface DataTypeDescription {
 	shape: string;
 	/** The schema behind it, for anyone reading Google's reference. */
 	schema: string;
+	/**
+	 * What a live `aggregate_health_data` call returns for it: Google's own
+	 * reconciled rollup where one exists, this server's statistics otherwise.
+	 */
+	aggregation: "google-rollup" | "computed";
 }
 
 /**
@@ -218,7 +227,25 @@ export function describeDataTypes(): DataTypeDescription[] {
 		id: type.id,
 		shape: type.shape,
 		schema: type.schema,
+		aggregation:
+			googleHealthRollupType(type.id) === undefined
+				? "computed"
+				: "google-rollup",
 	}));
+}
+
+/**
+ * The types that exist only as aggregates.
+ *
+ * Google derives these — total calories, calories by heart-rate zone — and
+ * serves them through `rollUp` alone: there is no collection of raw points, so
+ * `read_health_data` cannot name them and the catalog above does not list them.
+ * Without this, the most-asked-about energy figure would be undiscoverable.
+ */
+export function describeAggregateOnlyTypes(): string[] {
+	return GOOGLE_HEALTH_ROLLUP_TYPES.filter((type) => type.rollupOnly).map(
+		(type) => type.id,
+	);
 }
 
 /** `…/auth/googlehealth.sleep.readonly` → `sleep`. */

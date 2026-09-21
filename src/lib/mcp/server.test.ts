@@ -129,6 +129,55 @@ describe("MCP server", () => {
 		);
 	});
 
+	it("advertises the aggregate tool and validates its arguments", async () => {
+		const rollUpDataPoints = vi.fn(async () => [
+			{
+				endTime: "2026-09-02T00:00:00Z",
+				startTime: "2026-09-01T00:00:00Z",
+				steps: { countSum: "9000" },
+			},
+		]);
+		createGoogleHealthClient.mockReturnValue({ rollUpDataPoints });
+		const { client } = await connected({
+			authenticated: true,
+			userId: "user-1",
+			keyId: "key-1",
+		});
+
+		const { tools } = await client.listTools();
+		expect(tools.map((tool) => tool.name)).toEqual([
+			"list_health_data_types",
+			"read_health_data",
+			"aggregate_health_data",
+			"get_health_profile",
+		]);
+
+		const listed = resultJson(
+			await client.callTool({ name: "list_health_data_types", arguments: {} }),
+		);
+		expect(listed.aggregateOnlyDataTypes).toContain("total-calories");
+
+		const rejected = await client.callTool({
+			name: "aggregate_health_data",
+			arguments: { dataType: "steps", granularity: "week" },
+		});
+		expect(rejected.isError).toBe(true);
+		expect(rollUpDataPoints).not.toHaveBeenCalled();
+
+		const payload = resultJson(
+			await client.callTool({
+				name: "aggregate_health_data",
+				arguments: {
+					dataType: "steps",
+					from: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString(),
+					granularity: "day",
+				},
+			}),
+		);
+		expect(payload.method).toBe("google-rollup");
+		expect(payload.bucketCount).toBe(1);
+	});
+
 	it("lets a scoped OAuth identity use all tools as its subject", async () => {
 		createGoogleHealthClient.mockReturnValue({
 			collectDataPoints: vi.fn(async () => []),

@@ -1,36 +1,39 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { readHealthDataPoints } from "../../db/health-cache.server";
-import {
-	readHealthSyncAccount,
-	readHealthSyncStates,
-} from "../../db/health-sync-state.server";
-import {
-	getAuthBaseUrl,
-	getHealthSyncBackfillDays,
-	isHealthSyncEnabled,
-} from "../env.server";
 import type { GoogleHealthDataTypeId } from "../google-health-api.gen";
-import {
-	createGoogleHealthClient,
-	GoogleHealthApiError,
-} from "../google-health-api.server";
-import { GoogleHealthAuthorizationError } from "../google-health-token.server";
 import { LEGAL } from "../legal";
 import { createLogger } from "../logger.server";
-import { type McpIdentity, mcpIdentityHasScope } from "./credential";
 import {
-	type CachedCoverage,
-	chooseReadSource,
+	DEFAULT_AGGREGATE_SPAN_MS,
+	MAX_AGGREGATE_BUCKETS,
+	MAX_UTC_OFFSET_MINUTES,
+	MIN_UTC_OFFSET_MINUTES,
+} from "./aggregate";
+import { aggregateHealthData } from "./aggregate-tool.server";
+import type { McpIdentity } from "./credential";
+import {
 	clampHistoryWindow,
+	describeAggregateOnlyTypes,
 	describeDataTypes,
-	type HealthReadSource,
 	HISTORY_LIMIT_DAYS,
 	readableCategories,
-	scopeCategory,
 	summarizeDataPoint,
 } from "./health";
 import { MCP_OAUTH_SCOPE } from "./oauth-scopes";
+import {
+	type CacheLookup,
+	clampNote,
+	clientFor,
+	DAY_MS,
+	describeApiError,
+	json,
+	missingScope,
+	parseReadRange,
+	readHealthDataFailure,
+	resolveCacheLookup,
+	text,
+} from "./tool-support.server";
 
 /**
  * Assembly of the MCP server: what tools this app exposes to an MCP client.
@@ -52,7 +55,6 @@ import { MCP_OAUTH_SCOPE } from "./oauth-scopes";
  */
 
 const log = createLogger("mcp:server");
-const TRAILING_SLASHES = /\/+$/;
 
 /**
  * Advertised to clients during `initialize`.
@@ -87,194 +89,11 @@ const DEFAULT_LIMIT = 50;
  */
 const MAX_LIMIT = 500;
 
-/** Dashboard for resolving a missing or revoked Google Health connection. */
-function dashboardUrl(): string {
-	return `${getAuthBaseUrl().replace(TRAILING_SLASHES, "")}/dashboard`;
-}
-
-/** A tool result carrying text. */
-function text(body: string, isError = false) {
-	return { content: [{ type: "text" as const, text: body }], isError };
-}
-
-/** A tool result carrying JSON, which is what these tools mostly return. */
-function json(payload: unknown) {
-	return text(JSON.stringify(payload, null, 2));
-}
-
-/**
- * Turns a failed Google call into something a model can act on.
- *
- * A 403 is the failure a user will actually hit — they connected Google Health
- * but left a category unticked — and "PERMISSION_DENIED" on its own tells them
- * nothing to do about it. The reply names the categories that can be read at
- * all, the ones this user granted, and where to change that.
- */
-function describeApiError(
-	error: unknown,
-	grantedScopes: readonly string[],
-): string {
-	// The likeliest failure of all, and it happens before Google is even called:
-	// the user has a valid MCP credential but never authorized Google Health, or
-	// revoked it since. On its own the message says what is wrong and not where
-	// to fix it.
-	if (error instanceof GoogleHealthAuthorizationError) {
-		return `${error.message} Do that at ${dashboardUrl()}.`;
-	}
-
-	if (!(error instanceof GoogleHealthApiError)) {
-		return error instanceof Error ? error.message : String(error);
-	}
-
-	if (error.status === 401 || error.status === 403) {
-		const granted = grantedScopes.map(scopeCategory);
-		return (
-			`Google refused this read (${error.googleStatus ?? error.status}). ` +
-			"That normally means the category was not granted on the consent " +
-			`screen. This API can read: ${readableCategories().join(", ")}. ` +
-			`You granted: ${granted.length > 0 ? granted.join(", ") : "nothing yet"}. ` +
-			`Reconnect Google Health at ${dashboardUrl()} to change that.`
-		);
-	}
-
-	return (
-		`Google Health returned ${error.status}` +
-		`${error.googleStatus ? ` (${error.googleStatus})` : ""}: ${error.message}` +
-		`${error.retryable ? " This one is worth retrying." : ""}`
-	);
-}
-
-function missingScope(identity: McpIdentity, tool: string) {
-	if (mcpIdentityHasScope(identity, MCP_OAUTH_SCOPE)) return null;
-	log.warn("refused tool: missing oauth scope", {
-		tool,
-		userId: identity.userId,
-		clientId: identity.via === "oauth" ? identity.clientId : null,
-		requiredScope: MCP_OAUTH_SCOPE,
-	});
-	return text(
-		`This OAuth access token is missing the required ${MCP_OAUTH_SCOPE} scope.`,
-		true,
-	);
-}
-
-function clientFor(identity: McpIdentity) {
-	return createGoogleHealthClient({ userId: identity.userId });
-}
-
 interface ReadHealthDataInput {
 	dataType: string;
 	from?: string;
 	to?: string;
 	limit?: number;
-}
-
-type ReadRangeResult =
-	| { ok: true; from?: Date; to?: Date }
-	| { ok: false; response: ReturnType<typeof text> };
-
-function parseReadRange(
-	from: string | undefined,
-	to: string | undefined,
-): ReadRangeResult {
-	const parsedFrom = from === undefined ? undefined : new Date(from);
-	const parsedTo = to === undefined ? undefined : new Date(to);
-	for (const [label, value] of [
-		["from", parsedFrom],
-		["to", parsedTo],
-	] as const) {
-		if (value !== undefined && Number.isNaN(value.getTime())) {
-			return {
-				ok: false,
-				response: text(
-					`\`${label}\` is not a date this server can read. Use RFC 3339, e.g. 2026-08-01T00:00:00Z.`,
-					true,
-				),
-			};
-		}
-	}
-	return { ok: true, from: parsedFrom, to: parsedTo };
-}
-
-async function readHealthDataFailure(
-	error: unknown,
-	client: ReturnType<typeof clientFor>,
-	dataType: string,
-) {
-	const grantedScopes =
-		error instanceof GoogleHealthApiError
-			? await client.grantedScopes().catch(() => [])
-			: [];
-
-	log.warn("read failed", {
-		dataType,
-		status: error instanceof GoogleHealthApiError ? error.status : null,
-		error: error instanceof Error ? error.message : String(error),
-	});
-	return text(describeApiError(error, grantedScopes), true);
-}
-
-/** A day, in milliseconds. */
-const DAY_MS = 24 * 60 * 60 * 1000;
-
-interface CacheLookup {
-	source: HealthReadSource;
-	/** How far back this read may reach, in days. */
-	limitDays: number;
-	coveredThrough: string | undefined;
-}
-
-/**
- * Whether this read can come from the stored history, and how far back it may
- * reach.
- *
- * The history limit differs by source on purpose. A live read is clamped to
- * `HISTORY_LIMIT_DAYS` because that is the window this account is entitled to.
- * A cached read is clamped to the backfill floor instead, because the cache
- * only ever contains what the sync fetched — the floor *is* the entitlement,
- * enforced when the data was written rather than again when it is read. Without
- * that, a user who opted in and waited for two years of history to accumulate
- * could not read any of it past ninety days, and the feature would collect data
- * nobody could ask about.
- */
-async function resolveCacheLookup(
-	userId: string,
-	dataType: string,
-	window: { fromMs: number; toMs: number | undefined },
-): Promise<CacheLookup> {
-	const live: CacheLookup = {
-		coveredThrough: undefined,
-		limitDays: HISTORY_LIMIT_DAYS,
-		source: "live",
-	};
-	if (!isHealthSyncEnabled()) return live;
-
-	const account = await readHealthSyncAccount(userId);
-	if (account?.enabled !== true) return live;
-
-	const state = (await readHealthSyncStates(userId)).find(
-		(row) => row.dataType === dataType,
-	);
-	const coverage: CachedCoverage | undefined =
-		state === undefined
-			? undefined
-			: { fromMs: state.coveredFromMs, throughMs: state.coveredThroughMs };
-
-	const source = chooseReadSource({
-		cacheEnabled: true,
-		coverage,
-		fromMs: window.fromMs,
-		toMs: window.toMs,
-	});
-
-	return {
-		coveredThrough:
-			state === undefined || state.coveredThroughMs === null
-				? undefined
-				: new Date(state.coveredThroughMs).toISOString(),
-		limitDays: getHealthSyncBackfillDays(),
-		source,
-	};
 }
 
 async function readHealthData(
@@ -404,15 +223,6 @@ async function readFromCache(request: CacheReadRequest) {
 	});
 }
 
-/** The one sentence a clamped window owes its caller. */
-function clampNote(
-	window: ReturnType<typeof clampHistoryWindow>,
-): string | undefined {
-	return window.clamped
-		? `Your requested start was earlier than this account's ${window.limitDays}-day history window, so it was moved forward. Older data was not searched.`
-		: undefined;
-}
-
 export function createMcpServer(identity: McpIdentity): McpServer {
 	const server = new McpServer(MCP_SERVER_INFO, {
 		// This copy is returned on every initialize response. Name both supported
@@ -420,8 +230,11 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 		// way to connect after an OAuth client has already completed consent.
 		instructions:
 			`Read the signed-in user's Google Health data for ${LEGAL.appName}. ` +
-			"Call `list_health_data_types` first to see what can be queried, then " +
-			"`read_health_data` for a data type and time range. Every request must " +
+			"Call `list_health_data_types` first to see what can be queried. For " +
+			"totals, trends and anything spanning more than a few hours, use " +
+			"`aggregate_health_data`, which returns hourly or daily buckets " +
+			"instead of thousands of raw points; use `read_health_data` when the " +
+			"individual points matter. Every request must " +
 			"use either an API key or an OAuth access token with the " +
 			`\`${MCP_OAUTH_SCOPE}\` scope. A live read reaches back at most ` +
 			`${HISTORY_LIMIT_DAYS} days; if the user stores their history, a read ` +
@@ -445,6 +258,7 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 			if (refusal !== null) return refusal;
 
 			return json({
+				aggregateOnlyDataTypes: describeAggregateOnlyTypes(),
 				dataTypes: describeDataTypes(),
 				readableCategories: readableCategories(),
 				note:
@@ -495,6 +309,58 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 			annotations: { readOnlyHint: true, openWorldHint: true },
 		},
 		async (input) => readHealthData(identity, input),
+	);
+
+	server.registerTool(
+		"aggregate_health_data",
+		{
+			title: "Aggregate health data",
+			description:
+				"Summarise one data type into hourly or daily buckets over a time " +
+				"range — daily step totals, hourly heart-rate averages, minutes " +
+				"asleep per night. Prefer this to `read_health_data` for totals and " +
+				"trends: raw data is minute-level, and a week of it is thousands of " +
+				"points. Use an id from `list_health_data_types`, including its " +
+				"`aggregateOnlyDataTypes` such as `total-calories`. The window is " +
+				"widened outward to whole buckets, so every bucket returned is " +
+				`complete; one call returns at most ${MAX_AGGREGATE_BUCKETS} buckets. ` +
+				"The reply's `method` says whether Google reconciled the numbers " +
+				"across devices (`google-rollup`) or this server computed them " +
+				"from raw points (`computed`), and the `values` differ accordingly.",
+			inputSchema: {
+				dataType: z
+					.string()
+					.describe("Data type id, e.g. `steps`, `heart-rate`, `sleep`."),
+				granularity: z
+					.enum(["hour", "day"])
+					.describe(
+						"Bucket size. Daily summary types only support `day`. Sleep is " +
+							"counted on the day it ended.",
+					),
+				from: z
+					.string()
+					.optional()
+					.describe(
+						"Start, RFC 3339. Defaults to " +
+							`${DEFAULT_AGGREGATE_SPAN_MS.day / DAY_MS} days before \`to\` for ` +
+							`\`day\`, ${DEFAULT_AGGREGATE_SPAN_MS.hour / DAY_MS} day for \`hour\`.`,
+					),
+				to: z.string().optional().describe("End, RFC 3339. Defaults to now."),
+				utcOffsetMinutes: z
+					.number()
+					.int()
+					.min(MIN_UTC_OFFSET_MINUTES)
+					.max(MAX_UTC_OFFSET_MINUTES)
+					.optional()
+					.describe(
+						"The user's UTC offset in minutes, e.g. 480 for UTC+8, -300 for " +
+							"UTC-5. Bucket boundaries are drawn on this clock, so set it " +
+							"for days to mean the user's days. Defaults to 0 (UTC).",
+					),
+			},
+			annotations: { readOnlyHint: true, openWorldHint: true },
+		},
+		async (input) => aggregateHealthData(identity, input),
 	);
 
 	server.registerTool(
