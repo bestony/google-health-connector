@@ -95,8 +95,16 @@ docker compose --env-file deployment/.env -f deployment/compose.sqlite.yaml up -
 
 Replace `compose.sqlite.yaml` with `compose.postgresql.yaml` or
 `compose.mysql.yaml` when selecting another database. Only the application
-port is published (`${APP_PORT:-3000}:3000`); database ports are not exposed on
-the host.
+port is published (`${APP_BIND:-0.0.0.0}:${APP_PORT:-3000}:3000`); database
+ports are not exposed on the host.
+
+### Behind a reverse proxy
+
+When Nginx, Caddy, or another proxy on the same host terminates TLS, set
+`APP_BIND=127.0.0.1` so the plain HTTP port is reachable only from the host,
+and point the proxy at `http://127.0.0.1:${APP_PORT}`. The proxy should forward
+the original `Host` header and `X-Forwarded-Proto: https`, and
+`BETTER_AUTH_URL` must be the public `https://` origin the proxy serves.
 
 SQLite uses one named volume for the database and is limited to one application
 replica on one host. Do not use it as a multi-node or multi-replica database.
@@ -149,6 +157,22 @@ Do not use `down -v` as a routine operation: it deletes the database volume and
 all stored application data. Make an external backup before any maintenance
 that could remove a volume.
 
+### Back up MySQL
+
+Dump from inside the `mysql` container, which already holds the root password
+in its environment, and keep the dump outside the Docker volume:
+
+```bash
+docker compose --env-file deployment/.env -f deployment/compose.mysql.yaml exec -T mysql \
+  sh -c 'exec mysqldump --single-transaction --routines --user=root --password="$MYSQL_ROOT_PASSWORD" google_health_connector' \
+  | gzip > "backup-$(date +%F).sql.gz"
+```
+
+`--single-transaction` takes a consistent snapshot without locking InnoDB
+tables, so it is safe while the application runs. Schedule it from the host's
+cron or a systemd timer, and copy the files off the host. Restore by piping the
+decompressed dump into `mysql` the same way.
+
 ## Google OAuth settings
 
 Register the public origin in Google Cloud Console **before** you set
@@ -199,8 +223,8 @@ smoke test.
 - OAuth returns `redirect_uri_mismatch`: compare `BETTER_AUTH_URL` and the
   registered callback byte-for-byte, including scheme and port. See
   [`google-oauth.md`](google-oauth.md).
-- The app is healthy but inaccessible: check `APP_PORT`, the host firewall,
-  and the reverse proxy route. The database is reachable only by its Compose
+- The app is healthy but inaccessible: check `APP_PORT`, `APP_BIND`, the host
+  firewall, and the reverse proxy route. The database is reachable only by its Compose
   service name.
 
 ## Background health sync
@@ -215,7 +239,15 @@ separately from the History tab on `/dashboard`, and turning that off deletes
 what was kept.
 
 Compose runs it as a `sync-cron` sidecar that pokes the app's own endpoint on an
-interval. The endpoint decides how much work one call does and holds a database
+interval. The sidecar belongs to the `sync` profile, so it starts only when
+every Compose command also passes `--profile sync`:
+
+```bash
+docker compose --env-file deployment/.env -f deployment/compose.mysql.yaml --profile sync up -d
+```
+
+Without the profile the sidecar is not created and `CRON_SECRET` may stay
+empty. With it, the sidecar exits immediately if `CRON_SECRET` is empty. The endpoint decides how much work one call does and holds a database
 lease while it runs, so overlapping calls are answered with `skipped_locked` and
 a 200 rather than doing the work twice.
 
