@@ -92,12 +92,62 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  mysql:
+    # The integration suite runs on SQLite only; this job applies the MySQL
+    # migration lineage and round-trips the dialect-switching database code
+    # against the same server version compose.mysql.yaml deploys.
+    name: MySQL round-trip
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: google_health_connector
+          MYSQL_USER: google_health_connector
+          MYSQL_PASSWORD: ci-password
+          MYSQL_ROOT_PASSWORD: ci-root-password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping --host=127.0.0.1 --user=root --password=ci-root-password --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=24
+    env:
+      DATABASE_URL: mysql://google_health_connector:ci-password@127.0.0.1:3306/google_health_connector
+      LOG_LEVEL: info
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: ${{ env.PNPM_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Apply MySQL migrations
+        run: pnpm db:migrate
+
+      - name: Round-trip the health cache against MySQL
+        run: pnpm db:roundtrip
+
   container:
     name: Container (${{ matrix.target }})
-    if: ${{ needs.unit.result == 'success' && needs.integration.result == 'success' }}
+    if: ${{ needs.unit.result == 'success' && needs.integration.result == 'success' && needs.mysql.result == 'success' }}
     needs:
       - unit
       - integration
+      - mysql
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
