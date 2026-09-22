@@ -42,12 +42,13 @@ services:
       CRON_SECRET: ${CRON_SECRET:-}
       HEALTH_SYNC_BUDGET_MS: ${HEALTH_SYNC_BUDGET_MS:-120000}
       HEALTH_SYNC_BACKFILL_DAYS: ${HEALTH_SYNC_BACKFILL_DAYS:-730}
+      HEALTH_SYNC_DATA_TYPES: ${HEALTH_SYNC_DATA_TYPES:-}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       NODE_ENV: production
       NITRO_HOST: 0.0.0.0
       NITRO_PORT: 3000
     ports:
-      - ${APP_PORT:-3000}:3000
+      - ${APP_BIND:-0.0.0.0}:${APP_PORT:-3000}:3000
     depends_on:
       migration:
         condition: service_completed_successfully
@@ -59,15 +60,19 @@ services:
     # how much work one call does and holds a database lease while it runs, so
     # this sidecar only needs to call it — overlapping calls are answered with
     # `skipped_locked` and a 200.
+    # Started only with `--profile sync`. Compose interpolates every service,
+    # profile or not, so CRON_SECRET is checked by the command itself instead of
+    # `:?`; otherwise a deployment with the sync off would still need it.
+    profiles: ["sync"]
     image: curlimages/curl:8.11.1
     entrypoint: ["/bin/sh", "-c"]
     command:
       # One line per command on purpose: YAML's folded scalar keeps the newline
       # on any line indented further than the first, so a "readable" multi-line
       # curl silently becomes several broken commands.
-      - 'while true; do curl -fsS -m 300 -X POST -H "Authorization: Bearer $$CRON_SECRET" http://app:3000/api/cron/sync > /dev/null || echo "[sync-cron] call failed"; sleep "$${SYNC_INTERVAL_SECONDS:-600}"; done'
+      - '[ -n "$$CRON_SECRET" ] || { echo "[sync-cron] CRON_SECRET is required by the sync profile"; exit 1; }; while true; do curl -fsS -m 300 -X POST -H "Authorization: Bearer $$CRON_SECRET" http://app:3000/api/cron/sync > /dev/null || echo "[sync-cron] call failed"; sleep "$${SYNC_INTERVAL_SECONDS:-600}"; done'
     environment:
-      CRON_SECRET: ${CRON_SECRET:?CRON_SECRET is required when HEALTH_SYNC_ENABLED is true}
+      CRON_SECRET: ${CRON_SECRET:-}
       SYNC_INTERVAL_SECONDS: ${SYNC_INTERVAL_SECONDS:-600}
     depends_on:
       app:
