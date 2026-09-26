@@ -157,22 +157,6 @@ Do not use `down -v` as a routine operation: it deletes the database volume and
 all stored application data. Make an external backup before any maintenance
 that could remove a volume.
 
-### Back up MySQL
-
-Dump from inside the `mysql` container, which already holds the root password
-in its environment, and keep the dump outside the Docker volume:
-
-```bash
-docker compose --env-file deployment/.env -f deployment/compose.mysql.yaml exec -T mysql \
-  sh -c 'exec mysqldump --single-transaction --routines --user=root --password="$MYSQL_ROOT_PASSWORD" google_health_connector' \
-  | gzip > "backup-$(date +%F).sql.gz"
-```
-
-`--single-transaction` takes a consistent snapshot without locking InnoDB
-tables, so it is safe while the application runs. Schedule it from the host's
-cron or a systemd timer, and copy the files off the host. Restore by piping the
-decompressed dump into `mysql` the same way.
-
 ## Google OAuth settings
 
 Register the public origin in Google Cloud Console **before** you set
