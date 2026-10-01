@@ -93,7 +93,7 @@ export const healthSyncState = pgTable(
 	],
 );
 
-/** Per-user opt-in switch and the sync's cached view of the user. */
+/** Per-user legacy opt-in switch and the sync's cached view of the user. */
 export const healthSyncAccount = pgTable("health_sync_account", {
 	userId: text("user_id")
 		.primaryKey()

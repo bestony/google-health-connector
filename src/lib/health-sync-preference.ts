@@ -11,16 +11,18 @@ import {
 } from "../db/health-sync-state.server";
 import { getAuth } from "./auth.server";
 import { isHealthSyncEnabled } from "./env.server";
+import {
+	assertHealthSyncPreferenceChangeAllowed,
+	validateHealthSyncPreferenceChange,
+} from "./health-sync-policy";
 import { createLogger } from "./logger";
 
 /**
  * The user's own switch for the health data cache, and what it is holding.
  *
- * This is the module that makes the privacy policy true. The policy says
- * nothing of a user's health data is stored until they turn this on, and that
- * turning it off deletes what was kept — so `enabled` defaults to false,
- * nothing but this module sets it, and disabling purges rather than marking a
- * row inactive.
+ * Existing opted-in accounts can still inspect and delete their stored history.
+ * New opt-ins are refused by the mutation below, and disabling purges rather
+ * than marking a row inactive.
  *
  * Same isomorphic shape as `api-key.ts`: TanStack Start strips the `.handler()`
  * body and its server imports from the client bundle, so the dashboard card can
@@ -146,7 +148,7 @@ export const fetchHealthSyncPreference = createServerFn({
 });
 
 /**
- * Turns the cache on or off for the signed-in user.
+ * Disables the cache for the signed-in user. New opt-ins are refused.
  *
  * Turning it **off deletes everything already cached**, immediately, rather
  * than marking the row inactive and leaving the data in place. That is not a
@@ -154,35 +156,33 @@ export const fetchHealthSyncPreference = createServerFn({
  * and a soft disable would make that sentence false.
  */
 export const setHealthSyncEnabled = createServerFn({ method: "POST" })
-	.inputValidator((enabled: boolean) => enabled)
+	.validator(validateHealthSyncPreferenceChange)
 	.handler(async ({ data: enabled }): Promise<HealthSyncPreference> => {
 		const headers = getRequest().headers;
 		const userId = await requireUserId(headers);
+		try {
+			assertHealthSyncPreferenceChangeAllowed(enabled);
+		} catch (error) {
+			log.warn("rejected health sync opt-in", { userId });
+			throw error;
+		}
 		const now = new Date();
 		const existing = await readHealthSyncAccount(userId);
 
 		await upsertHealthSyncAccount({
-			disabledAt: enabled ? null : now,
-			enabled,
-			enabledAt: enabled
-				? (existing?.enabledAt ?? now)
-				: (existing?.enabledAt ?? null),
-			// Forget what was learned about the user while they were opted out, so
-			// re-enabling re-probes rather than trusting a year-old timezone.
-			lastProbedAt: enabled ? (existing?.lastProbedAt ?? null) : null,
-			membershipStartDateMs: enabled
-				? (existing?.membershipStartDateMs ?? null)
-				: null,
-			timeZone: enabled ? (existing?.timeZone ?? null) : null,
-			timeZoneSource: enabled ? (existing?.timeZoneSource ?? null) : null,
+			disabledAt: now,
+			enabled: false,
+			enabledAt: existing?.enabledAt ?? null,
+			lastProbedAt: null,
+			membershipStartDateMs: null,
+			timeZone: null,
+			timeZoneSource: null,
 			userId,
 		});
 
-		if (!enabled) {
-			await purgeUserHealthCache(userId);
-		}
+		await purgeUserHealthCache(userId);
 
-		log.info("health sync preference changed", { enabled, userId });
+		log.info("health sync preference changed", { enabled: false, userId });
 		return fetchHealthSyncPreference();
 	});
 

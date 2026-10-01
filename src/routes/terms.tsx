@@ -86,10 +86,10 @@ const SECTIONS: readonly LegalSection[] = [
 						without storing a server-side copy;
 					</li>
 					<li>
-						optionally store a copy of those same categories, on a daily
-						schedule, if and only if you turn on stored history from your
-						dashboard — see the privacy policy for what is kept and for how
-						long;
+						continue storing a copy of those same categories, on a daily
+						schedule, for accounts that already enabled stored history — see the
+						privacy policy for what is kept and for how long; new opt-ins are
+						currently unavailable;
 					</li>
 					<li>
 						write records back to Google Health, for the categories where you

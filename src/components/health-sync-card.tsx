@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { HEALTH_SYNC_OPT_IN_DISABLED_MESSAGE } from "../lib/health-sync-policy";
 import {
 	type HealthSyncPreference,
 	purgeHealthSyncCache,
@@ -9,11 +10,8 @@ import {
 /**
  * The health data cache card on the dashboard.
  *
- * This card is a consent surface, not a settings toggle. Everywhere else the
- * app promises to read health data live and keep no copy; turning this on is
- * the one thing that changes that, so the card says plainly what will be
- * stored, for how long, and that switching off deletes it — in the same words
- * the privacy policy uses.
+ * Existing stored-history accounts can inspect and delete their copy here. New
+ * opt-ins are disabled, so the card does not render an enable action.
  *
  * Turning it off is destructive and therefore asks first, like the API key
  * card's revoke. The confirmation is not about the click being hard to undo —
@@ -28,7 +26,7 @@ interface HealthSyncCardProps {
 	onChanged: () => Promise<void>;
 }
 
-type Pending = "enable" | "disable" | "purge" | "retry" | null;
+type Pending = "disable" | "purge" | "retry" | null;
 
 const NUMBER_FORMAT = new Intl.NumberFormat();
 
@@ -97,17 +95,25 @@ export function HealthSyncCard({ preference, onChanged }: HealthSyncCardProps) {
 				</span>
 			</header>
 
-			<p className="mt-2 max-w-prose text-sm text-muted-foreground">
-				By default we read your health data live from Google and keep no copy.
-				Turn this on and we will also fetch the categories you authorized once a
-				day and store them here, which is what makes questions about last year —
-				trends, comparisons, year-over-year — answerable at all.
-			</p>
-			<p className="mt-2 max-w-prose text-sm text-muted-foreground">
-				We store only what you already authorized. Turning this off deletes
-				everything we kept, straight away, and so does deleting your account or
-				revoking our access at Google.
-			</p>
+			{preference.enabled ? (
+				<>
+					<p className="mt-2 max-w-prose text-sm text-muted-foreground">
+						Stored history fetches the categories you authorized once a day and
+						keeps them here, which makes questions about last year — trends,
+						comparisons, year-over-year — answerable at all.
+					</p>
+					<p className="mt-2 max-w-prose text-sm text-muted-foreground">
+						We store only what you already authorized. Turning this off deletes
+						everything we kept, straight away, and so does deleting your account
+						or revoking our access at Google.
+					</p>
+				</>
+			) : (
+				<p className="mt-2 max-w-prose text-sm text-muted-foreground">
+					We read your health data live from Google and keep no copy.{" "}
+					{HEALTH_SYNC_OPT_IN_DISABLED_MESSAGE}
+				</p>
+			)}
 
 			{preference.enabled && (
 				<dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
@@ -148,23 +154,24 @@ export function HealthSyncCard({ preference, onChanged }: HealthSyncCardProps) {
 				</div>
 			)}
 
-			<div className="mt-5 flex flex-wrap gap-2">
-				<CardActions
-					busy={busy}
-					confirmingDisable={confirmingDisable}
-					enabled={preference.enabled}
-					pending={pending}
-					pointCount={preference.pointCount}
-					onConfirmingDisable={setConfirmingDisable}
-					onRun={run}
-				/>
-			</div>
+			{preference.enabled && (
+				<div className="mt-5 flex flex-wrap gap-2">
+					<CardActions
+						busy={busy}
+						confirmingDisable={confirmingDisable}
+						pending={pending}
+						pointCount={preference.pointCount}
+						onConfirmingDisable={setConfirmingDisable}
+						onRun={run}
+					/>
+				</div>
+			)}
 
 			{confirmingDisable && (
 				<p className="mt-3 max-w-prose text-sm text-muted-foreground">
-					Everything cached is deleted immediately. You can turn this back on
-					whenever you like, but the history has to be fetched again from
-					scratch, which takes days rather than minutes.
+					Everything cached is deleted immediately. Future requests continue to
+					read live from Google; stored history cannot be enabled for a new
+					opt-in.
 				</p>
 			)}
 
@@ -174,7 +181,6 @@ export function HealthSyncCard({ preference, onChanged }: HealthSyncCardProps) {
 }
 
 interface CardActionsProps {
-	enabled: boolean;
 	confirmingDisable: boolean;
 	busy: boolean;
 	pending: Pending;
@@ -190,26 +196,11 @@ const OUTLINE_BUTTON =
 	"rounded-md border border-border bg-background px-3 py-2 text-sm font-medium transition-colors hover:bg-secondary disabled:opacity-50";
 
 /**
- * The three states the buttons can be in, as a component rather than nested
- * ternaries: off, on, and on-with-a-confirmation-pending.
+ * The two states the buttons can be in, as a component rather than nested
+ * ternaries: on, and on-with-a-confirmation-pending. New opt-ins are disabled.
  */
 function CardActions(props: CardActionsProps) {
 	const { busy, onConfirmingDisable, onRun, pending } = props;
-
-	if (!props.enabled) {
-		return (
-			<button
-				className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-opacity hover:opacity-90 disabled:opacity-50"
-				disabled={busy}
-				type="button"
-				onClick={() =>
-					onRun("enable", () => setHealthSyncEnabled({ data: true }))
-				}
-			>
-				{pending === "enable" ? "Turning on…" : "Store my health history"}
-			</button>
-		);
-	}
 
 	if (props.confirmingDisable) {
 		return (

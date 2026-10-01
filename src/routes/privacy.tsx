@@ -110,11 +110,10 @@ const SECTIONS: readonly LegalSection[] = [
 						client requests it, and by default we keep no copy of it.
 					</li>
 					<li>
-						You can turn on <strong>stored history</strong> on your dashboard.
-						While it is on, we fetch the categories you already authorized once
-						a day and keep them, so questions that span more than the last few
-						months can be answered. It is off until you turn it on, and turning
-						it off deletes everything we kept.
+						<strong>Stored history</strong> is currently unavailable for new
+						opt-ins. Accounts that already enabled it may keep the categories
+						they authorized, fetched once a day, and turning that storage off
+						deletes everything we kept.
 					</li>
 					<li>
 						We do not sell your data, we do not use it for advertising, and we
@@ -222,14 +221,15 @@ const SECTIONS: readonly LegalSection[] = [
 					a backup.
 				</Para>
 				<Para>
-					Stored history changes that, and only for as long as you leave it on.
-					Turning it on from your dashboard tells us to fetch the categories you
-					already granted on a daily schedule and keep the records in our
-					database, so that a question about last year can be answered without
-					asking Google for a year of data in one request. It never widens what
-					we may read: we store only what your Google permissions already allow
-					us to retrieve, and a category you leave unticked is never fetched and
-					never stored. See <Ref id="retention" /> for how long we keep it and{" "}
+					For accounts that already enabled stored history, it changes that
+					while the setting remains on. The daily sync keeps the categories
+					those accounts already granted in our database, so a question about
+					last year can be answered without asking Google for a year of data in
+					one request. New stored-history opt-ins are unavailable. Stored
+					history never widens what we may read: we store only what Google
+					permissions already allow us to retrieve, and a category left unticked
+					is never fetched or stored. See
+					<Ref id="retention" /> for how long we keep it and{" "}
 					<Ref id="your-choices" /> for how to delete it.
 				</Para>
 
@@ -566,15 +566,14 @@ const SECTIONS: readonly LegalSection[] = [
 		body: (
 			<Bullets>
 				<li>
-					<strong>Google Health data</strong> — not retained on our servers
-					unless you turn on stored history. Without it we read a record from
-					Google for one request and do not write it to our database,
-					server-side caches or backups. With it on, we keep the records we
-					fetched until you turn it off, delete them from your dashboard, or
-					delete your account — whichever comes first. There is no separate
-					expiry clock: we do not quietly discard your history behind your back,
-					and we do not keep it once you have told us to stop. Google keeps the
-					source records under your Google Account settings either way.
+					<strong>Google Health data</strong> — not retained on our servers for
+					new opt-ins. For an account that already enabled stored history, we
+					keep the records we fetched until you turn it off, delete them from
+					your dashboard, or delete your account — whichever comes first. There
+					is no separate expiry clock: we do not quietly discard your history
+					behind your back, and we do not keep it once you have told us to stop.
+					Google keeps the source records under your Google Account settings
+					either way.
 				</li>
 				<li>
 					<strong>Google authorization credentials</strong> — updated when

@@ -158,8 +158,9 @@ platform kills a run while it is writing its own bookkeeping.
 | `HEALTH_SYNC_BUDGET_MS` | `50000` on Pro, comfortably under the 60-second ceiling. |
 | `LOG_LEVEL` | `info`, so the two-line run summary is visible. The production default is `error`, which hides it. |
 
-Turning the switch on does not store anyone's data. Each user opts in
-separately from the History tab on `/dashboard`.
+Turning the switch on does not store anyone's data. New stored-history opt-ins
+are disabled; the sync only serves accounts that already enabled history, which
+they can turn off from the History tab on `/dashboard`.
 
 ### On Hobby instead
 

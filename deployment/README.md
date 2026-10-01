@@ -213,14 +213,14 @@ smoke test.
 
 ## Background health sync
 
-Optional, and off unless `HEALTH_SYNC_ENABLED=true`. It syncs each opted-in
-user's Google Health data once a day so that questions spanning more than a few
-months can be answered; see development.md → Background sync for what it does
-and why.
+Optional, and off unless `HEALTH_SYNC_ENABLED=true`. It syncs Google Health data
+once a day for accounts that already opted into stored history so that questions
+spanning more than a few months can be answered; see development.md → Background
+sync for what it does and why.
 
-Turning it on for the deployment does not store anyone's data. Each user opts in
-separately from the History tab on `/dashboard`, and turning that off deletes
-what was kept.
+Turning it on for the deployment does not store anyone's data. New user opt-ins
+are currently disabled; existing stored-history users can turn it off from the
+History tab on `/dashboard`, which deletes what was kept.
 
 Compose runs it as a `sync-cron` sidecar that pokes the app's own endpoint on an
 interval. The sidecar belongs to the `sync` profile, so it starts only when

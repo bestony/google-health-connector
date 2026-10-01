@@ -5,10 +5,10 @@ GHealth Connector is a [TanStack Start](https://tanstack.com/start) application
 
 A user signs in, grants health scopes, then approves an OAuth application or
 issues an API key. Clients call `POST /mcp`. The server reads Google Health
-live and keeps no copy — unless the user turns on stored history, which syncs
-the categories they already authorized once a day so that questions spanning
-more than a few months can be answered. That switch is per user, off by
-default, and turning it off deletes what was stored.
+live and keeps no copy. Existing accounts that already opted into stored history
+may keep the categories they authorized, synced once a day, so that questions
+spanning more than a few months can be answered. New stored-history opt-ins are
+currently disabled, and turning existing storage off deletes what was stored.
 
 **Hosted service:** [https://www.stillwarm.app/](https://www.stillwarm.app/)
 

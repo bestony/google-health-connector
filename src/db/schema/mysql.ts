@@ -107,7 +107,7 @@ export const healthSyncState = mysqlTable(
 	],
 );
 
-/** Per-user opt-in switch and the sync's cached view of the user. */
+/** Per-user legacy opt-in switch and the sync's cached view of the user. */
 export const healthSyncAccount = mysqlTable("health_sync_account", {
 	userId: varchar("user_id", { length: 36 })
 		.primaryKey()

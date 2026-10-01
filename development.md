@@ -876,15 +876,16 @@ this is the first place to look when a tool call misbehaves.
 
 ## Background sync
 
-Everything above reads Google Health live. This does not: for users who opt in,
-a scheduled job fetches the categories they already authorized once a day and
-stores the points, so that a question spanning more than the last few months
-can be answered at all. `read_health_data` then serves a fully covered window
-from that store instead of asking Google.
+Everything above reads Google Health live. This does not: for accounts that
+already opted in, a scheduled job fetches the categories they authorized once a
+day and stores the points, so that a question spanning more than the last few
+months can be answered at all. `read_health_data` then serves a fully covered
+window from that store instead of asking Google.
 
-It is off twice over. `HEALTH_SYNC_ENABLED` must be `true` for the deployment,
-and each user must turn on stored history from the History tab on `/dashboard`.
-Neither implies the other, and `health_sync_account.enabled` defaults to false.
+It is off at the deployment gate unless `HEALTH_SYNC_ENABLED` is `true`. New
+stored-history opt-ins are disabled; `health_sync_account.enabled` remains the
+legacy eligibility flag for accounts that already enabled the feature. Existing
+users can still turn storage off from the History tab, which purges their copy.
 
 ### There is no job queue, and please do not add one
 

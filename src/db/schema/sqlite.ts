@@ -144,9 +144,8 @@ export const healthSyncState = sqliteTable(
  * One row per user: whether they opted into caching, and what the sync needs to
  * know about them.
  *
- * `enabled` defaults to false and nothing turns it on but the user, on
- * `/dashboard`. The privacy policy says we hold no copy until you ask for one,
- * and this column is what makes that true rather than a claim.
+ * `enabled` defaults to false. It remains the eligibility flag for accounts
+ * that already opted in; new opt-ins are rejected by the preference handler.
  *
  * The timezone is cached here because resolving it costs a Google call against
  * a *separate* consent category (`settings.readonly`), which many users will

@@ -7,11 +7,11 @@ import {
 /**
  * Who the sync may act for, and over which data types.
  *
- * Two independent gates, and both have to be open. The user must have opted in
- * — `health_sync_account.enabled`, which the dashboard sets and nothing else
- * does — and Google must have granted at least one readable health scope. A
- * user who opted in and then revoked at Google is not eligible, and neither is
- * one who granted every scope and never opted in.
+ * Two independent gates, and both have to be open. The user must have an
+ * existing opt-in — `health_sync_account.enabled`, which is retained for
+ * legacy accounts — and Google must have granted at least one readable health
+ * scope. A user who opted in and then revoked at Google is not eligible, and
+ * neither is one who granted every scope and never opted in.
  *
  * Pure string work over the `account.scope` column better-auth maintains, which
  * holds what Google *returned* rather than what was asked for.
