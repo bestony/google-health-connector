@@ -4,9 +4,9 @@ import {
 	replaceHtmlOnlyRefusal,
 } from "./html-only-refusal.server";
 
-const refusal = () =>
+const refusal = (status = 406) =>
 	new Response('{"error":"Only HTML requests are supported here"}', {
-		status: 500,
+		status,
 		headers: { "content-type": "application/json" },
 	});
 
@@ -34,12 +34,14 @@ describe("HTML-only response correction", () => {
 		).toBe(false);
 	});
 
-	it("turns the exact framework refusal into a 404", async () => {
+	it.each([
+		406, 500,
+	])("turns the exact framework refusal with status %i into a 404", async (status) => {
 		const response = await replaceHtmlOnlyRefusal(
 			new Request("https://example.test/not-an-api", {
 				headers: { Accept: "application/json" },
 			}),
-			refusal(),
+			refusal(status),
 		);
 		expect(response.status).toBe(404);
 		expect(await response.json()).toEqual({
@@ -69,13 +71,19 @@ describe("HTML-only response correction", () => {
 				new Request(request, { headers: { Accept: "text/html" } }),
 				refusal(),
 			),
-		).toSatisfy((response) => response.status === 500);
+		).toSatisfy((response) => response.status === 406);
 		expect(
 			await replaceHtmlOnlyRefusal(
 				request,
 				new Response("other", { status: 500 }),
 			),
 		).toSatisfy((response) => response.status === 500);
+		expect(
+			await replaceHtmlOnlyRefusal(
+				request,
+				new Response("other", { status: 406 }),
+			),
+		).toSatisfy((response) => response.status === 406);
 		const consumed = refusal();
 		await consumed.text();
 		expect(await replaceHtmlOnlyRefusal(request, consumed)).toBe(consumed);

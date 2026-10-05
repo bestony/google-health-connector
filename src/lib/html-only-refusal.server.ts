@@ -5,15 +5,18 @@ import { createLogger } from "./logger.server";
  *
  * The SSR handler answers the page routes, and it can only render HTML. Asked
  * for anything else — `Accept: application/json`, `text/plain`,
- * `application/xml` — it gives up with a **500**, and it does so for every page
- * route and for unmatched paths alike. A 500 says "this server is broken";
- * nothing is broken, the caller simply asked for a representation that does not
- * exist here. Server routes (`/mcp`, `/api/auth/*`) never reach that branch.
+ * `application/xml` — it gives up with a **406** (a **500** before
+ * `@tanstack/start-server-core` 1.169.39), and it does so for every page route
+ * and for unmatched paths alike. Neither status is honest about an unmatched
+ * path: a 500 says "this server is broken", and a 406 says the resource exists
+ * in some other representation. The caller simply asked for something that does
+ * not exist here. Server routes (`/mcp`, `/api/auth/*`) never reach that branch.
  *
  * The distinction is not cosmetic for this app. OAuth discovery documents are
  * explicit server routes and never reach this function. A misspelled discovery
  * URL or an unrelated unknown path does reach SSR, and a non-HTML client needs
- * an honest 404 instead of a framework 500 that looks retryable.
+ * an honest 404 instead of a framework status that looks retryable or
+ * negotiable.
  *
  * 404 rather than 406 for the page routes too: the only machine-readable
  * surfaces this deployment has are explicit server routes, so for a non-HTML
@@ -26,16 +29,23 @@ const log = createLogger("http:accept");
  * The refusal, byte for byte.
  *
  * Emitted by `createStartHandler` in `@tanstack/start-server-core` as
- * `Response.json({ error: "Only HTML requests are supported here" }, { status: 500 })`.
+ * `Response.json({ error: "Only HTML requests are supported here" }, { status: 406 })`.
  *
- * Matching the body — rather than "a 500 that happens to be JSON" — is what
+ * Matching the body — rather than "an error that happens to be JSON" — is what
  * keeps `/mcp` intact: a tool that genuinely fails also answers 500 with a JSON
  * body, and that must reach the caller untouched. Should a future TanStack
  * version reword this, the match simply stops firing and behaviour falls back
- * to today's; a stale constant costs the fix, never correctness.
+ * to the framework's; a stale constant costs the fix, never correctness.
  */
 const HTML_ONLY_REFUSAL_BODY =
 	'{"error":"Only HTML requests are supported here"}';
+
+/**
+ * The statuses the refusal has been sent with: 406 from start-server-core
+ * 1.169.39, 500 before it. Both are kept so a framework downgrade or a
+ * revert of that change cannot silently drop the 404.
+ */
+const HTML_ONLY_REFUSAL_STATUSES: ReadonlySet<number> = new Set([406, 500]);
 
 /** What the SSR handler is willing to produce. Mirrors the framework's own test. */
 const HTML_MEDIA_TYPES = ["*/*", "text/html"] as const;
@@ -62,21 +72,27 @@ export async function replaceHtmlOnlyRefusal(
 	request: Request,
 	response: Response,
 ): Promise<Response> {
-	// Two free checks first. The refusal is always a 500 and only ever reaches a
-	// caller that asked for something other than HTML, so every browser
-	// navigation and every successful API call leaves here without its body
-	// being touched.
-	if (response.status !== 500 || acceptsHtml(request)) return response;
+	// Two free checks first. The refusal always has one of a known pair of
+	// statuses and only ever reaches a caller that asked for something other
+	// than HTML, so every browser navigation and every successful API call
+	// leaves here without its body being touched.
+	if (
+		!HTML_ONLY_REFUSAL_STATUSES.has(response.status) ||
+		acceptsHtml(request)
+	) {
+		return response;
+	}
 
 	let body: string;
 	try {
 		// A clone, so the real body survives unread if this turns out to be
-		// somebody else's 500. `clone()` throws once a body has been consumed —
+		// somebody else's error. `clone()` throws once a body has been consumed —
 		// nothing upstream of the server entry does that, but a teardown race must
 		// not turn into a second failure on top of the first.
 		body = await response.clone().text();
 	} catch (error) {
-		log.warn("could not inspect 500 body", {
+		log.warn("could not inspect refusal body", {
+			status: response.status,
 			error: error instanceof Error ? error.message : String(error),
 		});
 		return response;
@@ -85,6 +101,7 @@ export async function replaceHtmlOnlyRefusal(
 	if (body !== HTML_ONLY_REFUSAL_BODY) return response;
 
 	log.info("answered non-html request with 404", {
+		frameworkStatus: response.status,
 		path: new URL(request.url).pathname,
 		accept: request.headers.get("Accept"),
 	});

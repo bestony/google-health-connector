@@ -674,7 +674,8 @@ public discovery chain. With the switch off, all four fail closed with `404`.
 
 These are explicit server routes. `src/lib/html-only-refusal.server.ts` still handles a
 misspelled discovery URL or another unmatched non-HTML path. It converts TanStack Start's
-HTML-only `500` refusal into an honest `404` without changing a real JSON response.
+HTML-only refusal (`406`, or `500` before start-server-core 1.169.39) into an honest `404`
+without changing a real JSON response.
 
 **The issuer is the bare origin on purpose.** better-auth's `withPath()` adds its default
 `/api/auth` base path to `BETTER_AUTH_URL`. If that derived value became the JWT issuer,

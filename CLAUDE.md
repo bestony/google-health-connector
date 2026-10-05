@@ -103,7 +103,7 @@ libSQL sends its token as a bearer header rather than in the URL.
 - `*.server.ts` — server-only. Never import from a component. May read `process.env`.
 - `src/server.ts` — the *server entry*, not a `.server.ts` module. It is the framework's
   own `createStartHandler(defaultStreamHandler)` plus one correction: the SSR handler
-  answers **500** to any request whose `Accept` is neither `text/html` nor the wildcard,
+  answers **406** (500 on older TanStack versions) to any request whose `Accept` is neither `text/html` nor the wildcard,
   and `html-only-refusal.server.ts` turns that into a `404` (development.md → MCP server). Wrap
   here rather than in a `src/start.ts` — creating a Start instance replaces the CSRF
   request middleware the framework otherwise installs by default.
