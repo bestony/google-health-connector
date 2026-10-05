@@ -11,7 +11,9 @@ test.describe("SSR shell and public routes", () => {
 		const html = await response.text();
 		expect(html).toContain("Connect Google Health once");
 		expect(html).toContain("12 health data categories");
-		expect(html).toContain("Free to connect. Pay only for the past.");
+		expect(html).toContain("Your assistant can read the last 90 days");
+		// Paid plans were removed; the home page must not advertise pricing.
+		expect(html).not.toContain("Pay only for the past");
 	});
 
 	test("SHELL-07 an unknown path returns the branded not-found page", async ({
