@@ -152,6 +152,10 @@ To roll back, set `IMAGE_TAG` to the previous known-good `sha-<full-commit-sha>`
 and run the same command. Database migrations are forward-only; confirm that
 the old application supports the current schema before rolling back an image.
 
+A recent migration drops the tables that earlier versions used to keep a copy of
+health data. Applying it deletes that data permanently. Make
+an external backup first if you must keep it.
+
 `docker compose down` stops and removes containers but keeps named volumes.
 Do not use `down -v` as a routine operation: it deletes the database volume and
 all stored application data. Make an external backup before any maintenance
@@ -210,48 +214,3 @@ smoke test.
 - The app is healthy but inaccessible: check `APP_PORT`, `APP_BIND`, the host
   firewall, and the reverse proxy route. The database is reachable only by its Compose
   service name.
-
-## Background health sync
-
-Optional, and off unless `HEALTH_SYNC_ENABLED=true`. It syncs Google Health data
-once a day for accounts that already opted into stored history so that questions
-spanning more than a few months can be answered; see development.md → Background
-sync for what it does and why.
-
-Turning it on for the deployment does not store anyone's data. New user opt-ins
-are currently disabled; existing stored-history users can turn it off from the
-History tab on `/dashboard`, which deletes what was kept.
-
-Compose runs it as a `sync-cron` sidecar that pokes the app's own endpoint on an
-interval. The sidecar belongs to the `sync` profile, so it starts only when
-every Compose command also passes `--profile sync`:
-
-```bash
-docker compose --env-file deployment/.env -f deployment/compose.mysql.yaml --profile sync up -d
-```
-
-Without the profile the sidecar is not created and `CRON_SECRET` may stay
-empty. With it, the sidecar exits immediately if `CRON_SECRET` is empty. The endpoint decides how much work one call does and holds a database
-lease while it runs, so overlapping calls are answered with `skipped_locked` and
-a 200 rather than doing the work twice.
-
-```bash
-HEALTH_SYNC_ENABLED=true
-CRON_SECRET=$(openssl rand -hex 32)
-SYNC_INTERVAL_SECONDS=600
-HEALTH_SYNC_BUDGET_MS=120000
-LOG_LEVEL=info
-```
-
-`CRON_SECRET` is required once the sync is enabled: without it both cron routes
-answer 503 rather than running unauthenticated. `LOG_LEVEL=info` is worth
-setting, because the production default of `error` hides the per-run summary.
-
-To see what it has been doing:
-
-```bash
-curl -H "Authorization: Bearer $CRON_SECRET" http://localhost:3000/api/cron/status
-```
-
-A row with `finishedAt` null and an old `startedAt` is an invocation that was
-killed — the one failure that leaves no log line.

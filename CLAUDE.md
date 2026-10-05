@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 A TanStack Start (React 19 + Vite + Nitro) app that turns a user's Google Health
 account into an MCP endpoint: sign in, grant health scopes, then approve an OAuth
 application or issue an API key for `POST /mcp`. Health data is read live from
-Google; a copy is stored server-side only for users who opt into stored history
-on `/dashboard`, which a nightly sync then keeps up to date.
+Google on every request; nothing is stored server-side, and reads reach back 90
+days.
 
 `development.md` is the source of truth for behaviour and rationale; the
 sections on Database, Authentication, Google Health authorization, The API
@@ -112,7 +112,7 @@ libSQL sends its token as a bearer header rather than in the URL.
   `google-health-access.ts` export `createServerFn` handlers plus query options and
   are imported freely from routes and components — TanStack Start strips the
   `.handler()` body and its server imports from the client bundle.
-- Pure-data modules (`google-health-scopes.ts`, `api-key-config.ts`, `plans.ts`,
+- Pure-data modules (`google-health-scopes.ts`, `api-key-config.ts`, `health-history.ts`,
   `legal.ts`, `dialect.ts`) are kept import-free on purpose so both sides can read them.
 
 `src/lib/env.server.ts` is the only place `process.env` is read, and it reads inside
@@ -186,8 +186,8 @@ makes the route correct on serverless).
 ```
 src/lib/mcp/health.ts         domain logic — clamping, summarising, the catalog. No MCP/HTTP types
 src/lib/mcp/aggregate.ts      bucketing, per-field statistics, cross-device reconciliation — pure
-src/lib/mcp/aggregate-tool.server.ts  aggregate_health_data: stored history, Google rollUp, or raw points
-src/lib/mcp/tool-support.server.ts    what every tool shares: results, scope refusal, cache lookup
+src/lib/mcp/aggregate-tool.server.ts  aggregate_health_data: Google rollUp, or raw live points
+src/lib/mcp/tool-support.server.ts    what every tool shares: results, scope refusal
 src/lib/mcp/server.ts         createMcpServer(identity): which tools exist, who may invoke them
 src/lib/mcp/oauth-scopes.ts   canonical issuer, resource, audiences and scope sets — pure data
 src/lib/mcp/oauth-metadata.ts public discovery response policy — pure response construction
