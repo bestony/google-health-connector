@@ -2,53 +2,35 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { aggregateHealthData } from "./aggregate-tool.server";
 import { MCP_OAUTH_SCOPE } from "./oauth-scopes";
 
-const {
-	FakeGoogleHealthApiError,
-	createGoogleHealthClient,
-	getHealthSyncBackfillDays,
-	isHealthSyncEnabled,
-	readHealthDataPoints,
-	readHealthSyncAccount,
-	readHealthSyncStates,
-} = vi.hoisted(() => {
-	class HoistedGoogleHealthApiError extends Error {
-		readonly status: number;
-		readonly googleStatus: string | undefined;
-		readonly retryable: boolean;
+const { FakeGoogleHealthApiError, createGoogleHealthClient } = vi.hoisted(
+	() => {
+		class HoistedGoogleHealthApiError extends Error {
+			readonly status: number;
+			readonly googleStatus: string | undefined;
+			readonly retryable: boolean;
 
-		constructor(status: number, message: string, googleStatus?: string) {
-			super(message);
-			this.name = "GoogleHealthApiError";
-			this.status = status;
-			this.googleStatus = googleStatus;
-			this.retryable = status === 429 || status >= 500;
+			constructor(status: number, message: string, googleStatus?: string) {
+				super(message);
+				this.name = "GoogleHealthApiError";
+				this.status = status;
+				this.googleStatus = googleStatus;
+				this.retryable = status === 429 || status >= 500;
+			}
 		}
-	}
-	return {
-		FakeGoogleHealthApiError: HoistedGoogleHealthApiError,
-		createGoogleHealthClient: vi.fn(),
-		getHealthSyncBackfillDays: vi.fn(() => 730),
-		isHealthSyncEnabled: vi.fn(() => false),
-		readHealthDataPoints: vi.fn(async () => [] as unknown[]),
-		readHealthSyncAccount: vi.fn(async () => undefined),
-		readHealthSyncStates: vi.fn(async () => []),
-	};
-});
+		return {
+			FakeGoogleHealthApiError: HoistedGoogleHealthApiError,
+			createGoogleHealthClient: vi.fn(),
+		};
+	},
+);
 
 vi.mock("../env.server", async (importOriginal) => {
 	const actual = await importOriginal<typeof import("../env.server")>();
 	return {
 		...actual,
 		getAuthBaseUrl: () => "https://connector.example",
-		getHealthSyncBackfillDays,
-		isHealthSyncEnabled,
 	};
 });
-vi.mock("../../db/health-cache.server", () => ({ readHealthDataPoints }));
-vi.mock("../../db/health-sync-state.server", () => ({
-	readHealthSyncAccount,
-	readHealthSyncStates,
-}));
 vi.mock("../google-health-api.server", () => ({
 	createGoogleHealthClient,
 	GoogleHealthApiError: FakeGoogleHealthApiError,
@@ -87,32 +69,11 @@ function googleClient(overrides: Record<string, unknown> = {}) {
 	return client;
 }
 
-/** Opted in to stored history, with `dataType` covered for years. */
-function storedHistoryCovers(dataType: string) {
-	isHealthSyncEnabled.mockReturnValue(true);
-	readHealthSyncAccount.mockResolvedValue({ enabled: true } as never);
-	readHealthSyncStates.mockResolvedValue([
-		{
-			coveredFromMs: Date.parse("2024-01-01T00:00:00Z"),
-			coveredThroughMs: Date.parse("2026-09-19T00:00:00Z"),
-			dataType,
-		},
-	] as never);
-}
-
 describe("aggregate_health_data", () => {
 	beforeEach(() => {
 		vi.useFakeTimers();
 		vi.setSystemTime(new Date(NOW));
 		createGoogleHealthClient.mockReset();
-		isHealthSyncEnabled.mockReturnValue(false);
-		getHealthSyncBackfillDays.mockReturnValue(730);
-		readHealthDataPoints.mockReset();
-		readHealthDataPoints.mockResolvedValue([]);
-		readHealthSyncAccount.mockReset();
-		readHealthSyncAccount.mockResolvedValue(undefined);
-		readHealthSyncStates.mockReset();
-		readHealthSyncStates.mockResolvedValue([]);
 	});
 
 	afterEach(() => {
@@ -183,12 +144,11 @@ describe("aggregate_health_data", () => {
 		});
 
 		it("does not suggest a coarser granularity when already at the coarsest", async () => {
-			storedHistoryCovers("steps");
 			const result = await aggregateHealthData(IDENTITY, {
 				dataType: "steps",
-				from: "2024-06-01T00:00:00Z",
+				from: "2026-09-01T00:00:00Z",
 				granularity: "day",
-				to: "2026-06-01T00:00:00Z",
+				to: "2028-09-01T00:00:00Z",
 			});
 			const message = errorOf(result);
 			expect(message).toContain("day buckets");
@@ -324,8 +284,7 @@ describe("aggregate_health_data", () => {
 			]);
 		});
 
-		it("serves a rollup-only type without consulting stored history", async () => {
-			storedHistoryCovers("total-calories");
+		it("serves a rollup-only type", async () => {
 			const client = googleClient();
 
 			const payload = payloadOf(
@@ -339,7 +298,6 @@ describe("aggregate_health_data", () => {
 
 			expect(payload.method).toBe("google-rollup");
 			expect(client.rollUpDataPoints).toHaveBeenCalledOnce();
-			expect(readHealthSyncAccount).not.toHaveBeenCalled();
 		});
 
 		it("moves a start past the live history limit forward, and says so", async () => {
@@ -500,139 +458,6 @@ describe("aggregate_health_data", () => {
 				granularity: "day",
 			});
 			expect(errorOf(result)).toContain("socket hang up");
-		});
-	});
-
-	describe("computed from stored history", () => {
-		const WINDOW = {
-			from: "2025-01-01T00:00:00Z",
-			to: "2025-01-03T00:00:00Z",
-		};
-
-		it("aggregates a covered window without calling Google, years back", async () => {
-			storedHistoryCovers("steps");
-			readHealthDataPoints.mockResolvedValue([
-				{
-					observedAtMs: Date.parse("2025-01-01T08:00:00Z"),
-					observedEndMs: Date.parse("2025-01-01T08:15:00Z"),
-					sourceKey: "watch",
-					value: { count: "1200" },
-				},
-				{
-					observedAtMs: Date.parse("2025-01-01T08:05:00Z"),
-					observedEndMs: Date.parse("2025-01-01T08:20:00Z"),
-					sourceKey: "phone",
-					value: { count: "1100" },
-				},
-				{
-					observedAtMs: Date.parse("2025-01-01T08:30:00Z"),
-					observedEndMs: Date.parse("2025-01-01T08:45:00Z"),
-					sourceKey: "watch",
-					value: { count: "300" },
-				},
-			]);
-
-			const payload = payloadOf(
-				await aggregateHealthData(IDENTITY, {
-					dataType: "steps",
-					granularity: "day",
-					...WINDOW,
-				}),
-			);
-
-			expect(createGoogleHealthClient).not.toHaveBeenCalled();
-			expect(readHealthDataPoints).toHaveBeenCalledWith({
-				anchor: "start",
-				dataType: "steps",
-				fromMs: Date.parse(WINDOW.from),
-				limit: 50_001,
-				toMs: Date.parse(WINDOW.to),
-				userId: "user-1",
-			});
-			expect(payload).toMatchObject({
-				cachedThrough: "2026-09-19T00:00:00.000Z",
-				dataSources: 2,
-				method: "computed",
-				source: "cache",
-			});
-			// Two years back, and nothing was moved: stored history is bounded by
-			// what the sync fetched, not by the live window.
-			expect(payload).not.toHaveProperty("historyClamped");
-			// The phone's copy of the same walk is not added on top of the watch's.
-			expect(payload.buckets).toEqual([
-				expect.objectContaining({
-					points: 2,
-					values: { count: { avg: 750, max: 1200, min: 300, sum: 1500 } },
-				}),
-			]);
-		});
-
-		it("reads sleep on the overlap anchor and buckets it by its end", async () => {
-			storedHistoryCovers("sleep");
-			readHealthDataPoints.mockResolvedValue([
-				{
-					observedAtMs: Date.parse("2024-12-31T22:00:00Z"),
-					observedEndMs: Date.parse("2025-01-01T06:00:00Z"),
-					sourceKey: null,
-					value: { summary: { minutesAsleep: "450" } },
-				},
-			]);
-
-			const payload = payloadOf(
-				await aggregateHealthData(IDENTITY, {
-					dataType: "sleep",
-					granularity: "day",
-					...WINDOW,
-				}),
-			);
-
-			expect(readHealthDataPoints).toHaveBeenCalledWith(
-				expect.objectContaining({ anchor: "overlap" }),
-			);
-			expect(payload.buckets).toEqual([
-				expect.objectContaining({ start: "2025-01-01T00:00:00Z" }),
-			]);
-		});
-
-		it("prefers stored history to a rollup when the window is covered", async () => {
-			storedHistoryCovers("heart-rate");
-			const client = googleClient();
-			const payload = payloadOf(
-				await aggregateHealthData(IDENTITY, {
-					dataType: "heart-rate",
-					granularity: "day",
-					...WINDOW,
-				}),
-			);
-			expect(payload.source).toBe("cache");
-			expect(client.rollUpDataPoints).not.toHaveBeenCalled();
-		});
-
-		it("falls back to Google when the window reaches past the coverage", async () => {
-			storedHistoryCovers("steps");
-			const client = googleClient();
-			const payload = payloadOf(
-				await aggregateHealthData(IDENTITY, {
-					dataType: "steps",
-					from: "2026-09-15T00:00:00Z",
-					granularity: "day",
-				}),
-			);
-			expect(payload.source).toBe("live");
-			expect(client.rollUpDataPoints).toHaveBeenCalled();
-		});
-
-		it("refuses rather than aggregate the first fifty thousand points", async () => {
-			storedHistoryCovers("heart-rate");
-			readHealthDataPoints.mockResolvedValue(
-				Array.from({ length: 50_001 }, () => ({})),
-			);
-			const result = await aggregateHealthData(IDENTITY, {
-				dataType: "heart-rate",
-				granularity: "day",
-				...WINDOW,
-			});
-			expect(errorOf(result)).toContain("more than 50000 raw points");
 		});
 	});
 });

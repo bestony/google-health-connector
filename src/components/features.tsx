@@ -4,21 +4,28 @@ import {
 	PuzzlePieceIcon,
 } from "@heroicons/react/20/solid";
 import type { ComponentType, SVGProps } from "react";
-import { FREE_HISTORY_DAYS, MCP_CLIENTS } from "../lib/plans";
+import { HISTORY_LIMIT_DAYS } from "../lib/health-history";
 
 /**
  * What the product does, in three claims.
  *
- * The history window and the client list are read from `plans.ts` rather than
- * written out, because the pricing section below states the same two facts and
- * a landing page that contradicts itself about what the free tier includes is
- * worse than one that says nothing.
+ * The history window is read from the MCP tools' own limit rather than written
+ * out, so the page cannot promise a window that a read does not honour.
  *
  * The layout is Tailwind Plus's three-column feature grid, recoloured to this
  * app's theme tokens: the stock markup hard-codes indigo and gray, which would
  * sit next to a blue hero looking like a different site, and its `dark:`
  * variants are dead weight here — nothing ever puts `.dark` on the document.
  */
+
+/**
+ * AI clients named on the landing page as known to work.
+ *
+ * MCP is an open protocol and anything speaking it can connect, so this is a
+ * list of examples rather than a whitelist — which is why the copy around it
+ * says "and anything else that speaks MCP".
+ */
+const MCP_CLIENTS: readonly string[] = ["Claude", "Grok", "ChatGPT"];
 
 interface Feature {
 	name: string;
@@ -35,7 +42,7 @@ const FEATURES: readonly Feature[] = [
 	},
 	{
 		name: "History you can question",
-		description: `Look back across months, not just this morning. The free tier reaches ${FREE_HISTORY_DAYS} days; Pro removes the window entirely, so "how has my resting heart rate moved since last year" is a question you can actually ask.`,
+		description: `Look back across months, not just this morning. Your assistant can read the last ${HISTORY_LIMIT_DAYS} days, so "how has my resting heart rate moved this season" is a question you can actually ask.`,
 		icon: ClockIcon,
 	},
 	{

@@ -13,7 +13,7 @@ import type { GoogleHealthRollupField } from "../google-health-rollup";
  * needs: the questions people ask — "how did I sleep this month", "is my
  * resting pulse drifting" — are about hours and days. This module is the
  * platform's own aggregation, used wherever Google's `rollUp` cannot be: for
- * stored history, and for the half of the catalog Google does not roll up.
+ * the half of the catalog Google does not roll up.
  *
  * Like `health.ts`, deliberately free of MCP, HTTP and database types. The
  * tool decides where points come from; this module only decides what is true

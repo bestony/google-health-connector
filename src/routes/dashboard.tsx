@@ -3,7 +3,6 @@ import { useState } from "react";
 import { ApiKeyCard } from "../components/api-key-card";
 import { ConnectedAppsCard } from "../components/connected-apps-card";
 import { GoogleHealthAuthorization } from "../components/google-health-authorization";
-import { HealthSyncCard } from "../components/health-sync-card";
 import {
 	Tabs,
 	TabsContent,
@@ -18,10 +17,6 @@ import {
 } from "../lib/auth-errors";
 import { googleHealthAccessQueryOptions } from "../lib/google-health-access";
 import { hasAllGoogleHealthScopes } from "../lib/google-health-scopes";
-import {
-	HEALTH_SYNC_PREFERENCE_QUERY_KEY,
-	healthSyncPreferenceQueryOptions,
-} from "../lib/health-sync-preference";
 import { mcpEndpointQueryOptions } from "../lib/mcp/endpoint";
 import {
 	OAUTH_GRANTS_QUERY_KEY,
@@ -84,18 +79,16 @@ export const Route = createFileRoute("/dashboard")({
 	},
 	// Each card's whole shape — badge, button label, contents — follows from
 	// what the server already knows, so all of it is resolved before paint
-	// rather than popped in afterwards. The five are independent, so they are
+	// rather than popped in afterwards. The four are independent, so they are
 	// fetched together instead of in sequence.
 	loader: async ({ context }) => {
-		const [health, apiKey, oauthGrants, mcpConnection, healthSync] =
-			await Promise.all([
-				context.queryClient.ensureQueryData(googleHealthAccessQueryOptions()),
-				context.queryClient.ensureQueryData(apiKeyQueryOptions()),
-				context.queryClient.ensureQueryData(oauthGrantsQueryOptions()),
-				context.queryClient.ensureQueryData(mcpEndpointQueryOptions()),
-				context.queryClient.ensureQueryData(healthSyncPreferenceQueryOptions()),
-			]);
-		return { health, apiKey, oauthGrants, mcpConnection, healthSync };
+		const [health, apiKey, oauthGrants, mcpConnection] = await Promise.all([
+			context.queryClient.ensureQueryData(googleHealthAccessQueryOptions()),
+			context.queryClient.ensureQueryData(apiKeyQueryOptions()),
+			context.queryClient.ensureQueryData(oauthGrantsQueryOptions()),
+			context.queryClient.ensureQueryData(mcpEndpointQueryOptions()),
+		]);
+		return { health, apiKey, oauthGrants, mcpConnection };
 	},
 	component: DashboardPage,
 });
@@ -104,8 +97,7 @@ function DashboardPage() {
 	const router = useRouter();
 	const { session, queryClient } = Route.useRouteContext();
 	const search = Route.useSearch();
-	const { health, apiKey, oauthGrants, mcpConnection, healthSync } =
-		Route.useLoaderData();
+	const { health, apiKey, oauthGrants, mcpConnection } = Route.useLoaderData();
 	const [pending, setPending] = useState(false);
 
 	// A failed link round trip lands here as a query param, so it has to be read
@@ -151,11 +143,6 @@ function DashboardPage() {
 		await router.invalidate();
 	}
 
-	async function onHealthSyncChanged() {
-		queryClient.removeQueries({ queryKey: HEALTH_SYNC_PREFERENCE_QUERY_KEY });
-		await router.invalidate();
-	}
-
 	async function onSignOut() {
 		setPending(true);
 		await authClient.signOut();
@@ -197,7 +184,6 @@ function DashboardPage() {
 			<Tabs className="mt-8" defaultValue={defaultTab}>
 				<TabsList>
 					<TabsTrigger value="google-health">Google Health</TabsTrigger>
-					<TabsTrigger value="history">History</TabsTrigger>
 					<TabsTrigger value="api-key">API key</TabsTrigger>
 					<TabsTrigger value="connected-apps">Connected apps</TabsTrigger>
 				</TabsList>
@@ -215,12 +201,6 @@ function DashboardPage() {
 						errorCallbackURL={HEALTH_ERROR_CALLBACK_URL}
 						error={oauthError}
 						justAuthorized={justAuthorized}
-					/>
-				</TabsContent>
-				<TabsContent keepMounted value="history">
-					<HealthSyncCard
-						preference={healthSync}
-						onChanged={onHealthSyncChanged}
 					/>
 				</TabsContent>
 				<TabsContent keepMounted value="api-key">

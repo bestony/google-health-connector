@@ -13,7 +13,6 @@ import {
 } from "./google-health-scopes";
 import {
 	LEGAL,
-	LEGAL_BILLING,
 	LEGAL_CONTACT_MAILTO,
 	LEGAL_LINKS,
 	LEGAL_RETENTION,
@@ -30,14 +29,6 @@ import {
 	oauthJwksUrl,
 	protectedResourceMetadata,
 } from "./mcp/oauth-scopes";
-import {
-	FREE_HISTORY_DAYS,
-	MCP_CLIENTS,
-	PLANS,
-	PRO_ANNUAL_SAVING_PERCENT,
-	PRO_MONTHLY_PRICE,
-	PRO_PRICE,
-} from "./plans";
 
 describe("shared product facts", () => {
 	it("defines the API key contract", () => {
@@ -143,25 +134,11 @@ describe("shared product facts", () => {
 		).toBeLessThanOrEqual(300);
 	});
 
-	it("keeps pricing and plan claims internally consistent", () => {
-		expect(FREE_HISTORY_DAYS).toBe(90);
-		expect(PRO_PRICE).toEqual({ amount: "$9.99", period: "year" });
-		expect(PRO_MONTHLY_PRICE).toEqual({ amount: "$1.99", period: "month" });
-		expect(PRO_ANNUAL_SAVING_PERCENT).toBe(58);
-		expect(MCP_CLIENTS).toEqual(["Claude", "Grok", "ChatGPT"]);
-		expect(PLANS.map((plan) => plan.id)).toEqual(["plan-free", "plan-pro"]);
-		expect(PLANS.filter((plan) => plan.featured)).toHaveLength(1);
-	});
-
 	it("centralizes legal identity, retention and links", () => {
 		expect(LEGAL.appName).toContain(LEGAL.productName);
 		expect(LEGAL.appName).toContain(LEGAL.vendorName);
 		expect(LEGAL_CONTACT_MAILTO).toBe(`mailto:${LEGAL.contactEmail}`);
 		expect(LEGAL_RETENTION.deletionRequestDays).toBe(30);
-		expect(LEGAL_BILLING.refundProcessingBusinessDays).toEqual({
-			min: 5,
-			max: 10,
-		});
 		expect(LEGAL_LINKS.googleLimitedUse).toContain("additional_requirements");
 	});
 });

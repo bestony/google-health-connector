@@ -52,20 +52,10 @@ export const LEGAL = {
 	operatorLocation: "the People's Republic of China (Mainland China)",
 	/** Address for privacy questions, data exports and deletion requests. */
 	contactEmail: "bestony@linux.com",
-	/**
-	 * Who takes the money.
-	 *
-	 * Named rather than described as "our payment processor", because both a
-	 * GDPR recipient disclosure and Google's OAuth review expect a name they can
-	 * check. It has to match the entity a customer sees on their card statement:
-	 * a charge from a name the policy never mentions is what a chargeback is
-	 * made of.
-	 */
-	paymentProcessor: "Waffo Pancake",
 	/** When the current text takes effect. */
 	effectiveDate: "August 10, 2026",
 	/** When the current text was last changed. */
-	lastUpdated: "August 11, 2026",
+	lastUpdated: "October 5, 2026",
 	/** Rendered in the site footer; a constant keeps SSR and hydration in step. */
 	copyrightYear: 2026,
 } as const;
@@ -83,33 +73,6 @@ export const LEGAL_RETENTION = {
 	backupPurgeDays: 30,
 	/** How long request and error logs are kept before they are discarded. */
 	serverLogDays: 30,
-} as const;
-
-/**
- * The billing commitments the Terms make.
- *
- * These are promises with deadlines attached, and a support reply is measured
- * against them, so they are numbers rather than prose. Card networks read the
- * refund and cancellation terms as part of underwriting, which is the other
- * reason they are stated precisely enough to be checked.
- *
- * Prices are deliberately absent: they belong on the pricing page, in
- * `plans.ts`, so a price change is one edit and the documents cannot end up
- * quoting a figure the site stopped charging.
- */
-export const LEGAL_BILLING = {
-	/** Full-refund window for a first-ever subscription, from the first charge. */
-	newSubscriberRefundDays: 7,
-	/** After this long, an annual term is no longer refundable on request. */
-	annualRefundCutoffDays: 30,
-	/** An outage at least this long earns a pro-rata refund or an extension. */
-	outageRefundHours: 72,
-	/** How quickly a cancellation is confirmed by email. */
-	cancellationConfirmationMinutes: 10,
-	/** How long we take to acknowledge a refund request, in business days. */
-	refundAcknowledgeBusinessDays: 2,
-	/** How long an approved refund takes to reach the payment method. */
-	refundProcessingBusinessDays: { min: 5, max: 10 },
 } as const;
 
 /**

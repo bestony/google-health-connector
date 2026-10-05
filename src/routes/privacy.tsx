@@ -1,4 +1,4 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import {
 	Bullets,
 	Callout,
@@ -107,13 +107,7 @@ const SECTIONS: readonly LegalSection[] = [
 					</li>
 					<li>
 						We read each record live from Google when you or a connected MCP
-						client requests it, and by default we keep no copy of it.
-					</li>
-					<li>
-						<strong>Stored history</strong> is currently unavailable for new
-						opt-ins. Accounts that already enabled it may keep the categories
-						they authorized, fetched once a day, and turning that storage off
-						deletes everything we kept.
+						client requests it, and we keep no copy of it.
 					</li>
 					<li>
 						We do not sell your data, we do not use it for advertising, and we
@@ -131,11 +125,6 @@ const SECTIONS: readonly LegalSection[] = [
 					</li>
 					<li>
 						We do not use your health data to train machine learning models.
-					</li>
-					<li>
-						If you subscribe to a paid plan, {LEGAL.paymentProcessor} handles
-						the card details — they never reach our servers — and your health
-						data is no part of the payment.
 					</li>
 				</Bullets>
 			</>
@@ -214,23 +203,10 @@ const SECTIONS: readonly LegalSection[] = [
 					dashboard shows exactly which permissions Google actually granted.
 				</Para>
 				<Para>
-					By default the Service retrieves health records directly from Google
-					for each request. It processes a record in memory only long enough to
-					return the response you requested or send it to an MCP client you
-					connected, and does not write it to a database, a server-side cache or
-					a backup.
-				</Para>
-				<Para>
-					For accounts that already enabled stored history, it changes that
-					while the setting remains on. The daily sync keeps the categories
-					those accounts already granted in our database, so a question about
-					last year can be answered without asking Google for a year of data in
-					one request. New stored-history opt-ins are unavailable. Stored
-					history never widens what we may read: we store only what Google
-					permissions already allow us to retrieve, and a category left unticked
-					is never fetched or stored. See
-					<Ref id="retention" /> for how long we keep it and{" "}
-					<Ref id="your-choices" /> for how to delete it.
+					The Service retrieves health records directly from Google for each
+					request. It processes a record in memory only long enough to return
+					the response you requested or send it to an MCP client you connected,
+					and does not write it to a database, a server-side cache or a backup.
 				</Para>
 
 				<Subheading>c. Google authorization credentials</Subheading>
@@ -262,23 +238,7 @@ const SECTIONS: readonly LegalSection[] = [
 					fails.
 				</Para>
 
-				<Subheading>f. Billing information</Subheading>
-				<Para>
-					If you subscribe to a paid plan, {LEGAL.paymentProcessor} collects
-					your payment details and takes the payment. Your card number is
-					entered with them and stored by them; it does not pass through our
-					servers and we have no way to see it. What we hold is your plan, your
-					billing period and its renewal date, {LEGAL.paymentProcessor}'s
-					customer and transaction references, and the invoices we are required
-					to keep. If you only ever use the free plan, none of this exists.
-				</Para>
-				<Para>
-					Your health data is never part of a payment. {LEGAL.paymentProcessor}{" "}
-					receives what it needs to charge you — an account identifier, an email
-					address and an amount — and nothing about what is in your account.
-				</Para>
-
-				<Subheading>g. What we do not collect</Subheading>
+				<Subheading>f. What we do not collect</Subheading>
 				<Para>
 					We do not use third-party analytics, advertising SDKs, tracking pixels
 					or fingerprinting. We do not buy data about you from data brokers, and
@@ -322,12 +282,6 @@ const SECTIONS: readonly LegalSection[] = [
 						<strong>Session and technical data</strong> — to operate the Service
 						securely: diagnosing faults, investigating abuse, enforcing rate
 						limits, and meeting legal obligations.
-					</li>
-					<li>
-						<strong>Billing information</strong> — to take the payment you
-						authorized, renew or end a subscription when you say so, decide
-						which plan's features you get, issue invoices and refunds, and meet
-						tax and accounting obligations.
 					</li>
 				</Bullets>
 				<Callout tone="warning">
@@ -536,15 +490,6 @@ const SECTIONS: readonly LegalSection[] = [
 						use it for their own purposes.
 					</li>
 					<li>
-						<strong>{LEGAL.paymentProcessor}</strong>, our payment processor —
-						only if you subscribe, and only what is needed to charge you: an
-						account identifier, an email address and an amount. It never
-						receives your health data. It acts on our instructions, and it is
-						where your card details live: they are entered with{" "}
-						{LEGAL.paymentProcessor} and stored by {LEGAL.paymentProcessor},
-						never on our servers.
-					</li>
-					<li>
 						<strong>Legal compulsion</strong> — where we are required to
 						disclose by valid legal process. We will tell you before we comply
 						unless we are legally prohibited from doing so, and we will object
@@ -566,14 +511,10 @@ const SECTIONS: readonly LegalSection[] = [
 		body: (
 			<Bullets>
 				<li>
-					<strong>Google Health data</strong> — not retained on our servers for
-					new opt-ins. For an account that already enabled stored history, we
-					keep the records we fetched until you turn it off, delete them from
-					your dashboard, or delete your account — whichever comes first. There
-					is no separate expiry clock: we do not quietly discard your history
-					behind your back, and we do not keep it once you have told us to stop.
-					Google keeps the source records under your Google Account settings
-					either way.
+					<strong>Google Health data</strong> — not retained on our servers. We
+					read each record from Google when it is requested and keep no copy of
+					it. Google keeps the source records under your Google Account
+					settings.
 				</li>
 				<li>
 					<strong>Google authorization credentials</strong> — updated when
@@ -598,19 +539,10 @@ const SECTIONS: readonly LegalSection[] = [
 					{LEGAL_RETENTION.serverLogDays} days, then discarded.
 				</li>
 				<li>
-					<strong>Billing records</strong> — invoices and transaction records
-					are kept for as long as tax and accounting law requires us to keep
-					them, which is years rather than days. This is the one thing deleting
-					your account does not remove: we are not allowed to destroy a record
-					of a payment we took. It contains what you paid and when, not what is
-					in your health data.
-				</li>
-				<li>
 					<strong>Backups</strong> — encrypted backups of stored Service data
-					other than health records roll off within{" "}
-					{LEGAL_RETENTION.backupPurgeDays} days, so data you deleted can
-					persist in a backup for up to that long before it is gone for good. We
-					do not restore deleted data from backups.
+					roll off within {LEGAL_RETENTION.backupPurgeDays} days, so data you
+					deleted can persist in a backup for up to that long before it is gone
+					for good. We do not restore deleted data from backups.
 				</li>
 			</Bullets>
 		),
@@ -621,7 +553,7 @@ const SECTIONS: readonly LegalSection[] = [
 		body: (
 			<>
 				<Para>
-					These five controls are independent. You can use any of them at any
+					These four controls are independent. You can use any of them at any
 					time without giving a reason.
 				</Para>
 				<Steps>
@@ -631,20 +563,8 @@ const SECTIONS: readonly LegalSection[] = [
 							{LEGAL_LINKS.googlePermissions}
 						</ExternalLink>{" "}
 						and remove {LEGAL.appName}. We can no longer read anything from
-						Google Health from that moment, and the daily sync stops. If you had
-						stored history turned on, the records we already fetched stay until
-						you delete them — use the History tab on your dashboard, which
-						removes them immediately, or delete your account. Revocation cannot
-						recall data an MCP client already received.
-					</li>
-					<li>
-						<strong>Stop storing your history, and delete what we kept.</strong>{" "}
-						Use the History tab on your dashboard. Turning stored history off
-						deletes every record we cached for you straight away — not on a
-						schedule, and not marked as inactive somewhere. The same tab can
-						delete what is stored while leaving the setting on, if you would
-						rather start the history over. Neither action affects your Google
-						permissions, your API key or any connected application.
+						Google Health from that moment. Revocation cannot recall data an MCP
+						client already received.
 					</li>
 					<li>
 						<strong>Revoke the API key.</strong> Use the API key tab on your
@@ -662,25 +582,12 @@ const SECTIONS: readonly LegalSection[] = [
 						<strong>Delete stored account data, or your whole account.</strong>{" "}
 						Email <ContactEmail /> from the address on the account and say which
 						stored account information you want deleted or whether you want the
-						entire account removed. Deleting your account also deletes any
-						stored health history. We complete it within{" "}
+						entire account removed. We complete it within{" "}
 						{LEGAL_RETENTION.deletionRequestDays} days and confirm when it is
-						done. Deletion is permanent; see the backup window — and the billing
-						records we are not allowed to destroy — in <Ref id="retention" />.
+						done. Deletion is permanent; see the backup window in{" "}
+						<Ref id="retention" />.
 					</li>
 				</Steps>
-				<Para>
-					Cancelling a paid subscription is another separate action, and it
-					deletes nothing: your account and its stored data remain on the free
-					plan. How to cancel is in the{" "}
-					<Link
-						className="text-primary underline underline-offset-2"
-						to="/terms"
-					>
-						Terms of Service
-					</Link>
-					.
-				</Para>
 				<Para>
 					Deleting your account with us does not delete anything inside Google
 					Health. Your data there stays yours, and you can export it with{" "}

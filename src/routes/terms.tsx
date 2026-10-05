@@ -10,13 +10,8 @@ import {
 	Para,
 	Subheading,
 } from "../components/legal-document";
-import {
-	LEGAL,
-	LEGAL_BILLING,
-	LEGAL_LINKS,
-	LEGAL_RETENTION,
-} from "../lib/legal";
-import { FREE_HISTORY_DAYS } from "../lib/plans";
+import { HISTORY_LIMIT_DAYS } from "../lib/health-history";
+import { LEGAL, LEGAL_LINKS, LEGAL_RETENTION } from "../lib/legal";
 
 /**
  * Terms of Service.
@@ -35,7 +30,7 @@ export const Route = createFileRoute("/terms")({
 			{ title: `Terms of Service — ${LEGAL.appName}` },
 			{
 				name: "description",
-				content: `The agreement between you and ${LEGAL.appName}, covering accounts, Google Health access, MCP access, subscriptions, cancellation and refunds.`,
+				content: `The agreement between you and ${LEGAL.appName}, covering accounts, Google Health access, MCP access and acceptable use.`,
 			},
 		],
 	}),
@@ -83,13 +78,8 @@ const SECTIONS: readonly LegalSection[] = [
 					</li>
 					<li>
 						read the health data categories you authorized, live from Google,
-						without storing a server-side copy;
-					</li>
-					<li>
-						continue storing a copy of those same categories, on a daily
-						schedule, for accounts that already enabled stored history — see the
-						privacy policy for what is kept and for how long; new opt-ins are
-						currently unavailable;
+						reaching back up to {HISTORY_LIMIT_DAYS} days, without storing a
+						server-side copy;
 					</li>
 					<li>
 						write records back to Google Health, for the categories where you
@@ -213,11 +203,11 @@ const SECTIONS: readonly LegalSection[] = [
 				<Para>
 					You grant us a limited, non-exclusive, revocable, royalty-free licence
 					to process and transmit your data solely to operate the features you
-					asked for — retrieving it live from Google, storing a copy of it if
-					you turned on stored history, returning it to you, writing back what
-					you asked to write, and serving it to an MCP client you connected. The
-					licence exists only to make the Service work, and it ends when you
-					withdraw the applicable permission or delete your account.
+					asked for — retrieving it live from Google, returning it to you,
+					writing back what you asked to write, and serving it to an MCP client
+					you connected. The licence exists only to make the Service work, and
+					it ends when you withdraw the applicable permission or delete your
+					account.
 				</Para>
 				<Para>
 					We do not use your health data to train or fine-tune machine learning
@@ -337,215 +327,13 @@ const SECTIONS: readonly LegalSection[] = [
 		),
 	},
 	{
-		id: "plans",
-		title: "Plans",
+		id: "price",
+		title: "Price",
 		body: (
-			<>
-				<Para>
-					The Service has a free plan and a paid subscription. The free plan
-					reads your Google Health data live and reaches back{" "}
-					{FREE_HISTORY_DAYS} days; the paid plan removes that window so you can
-					query your whole history. What each plan includes, and what the paid
-					plan costs, is set out on our{" "}
-					<Link
-						className="text-primary underline underline-offset-2"
-						hash="pricing"
-						to="/"
-					>
-						pricing page
-					</Link>{" "}
-					— it is not repeated here, so the two can never disagree.
-				</Para>
-				<Para>
-					We may change what a plan includes or introduce new plans. Price
-					changes are governed by <Ref id="billing" />. Nothing here obliges you
-					to pay for anything: the free plan stays free, and you are only
-					charged if you subscribe.
-				</Para>
-			</>
-		),
-	},
-	{
-		id: "billing",
-		title: "Billing and payment",
-		body: (
-			<>
-				<Subheading>a. Your authorisation to charge you</Subheading>
-				<Callout tone="warning">
-					<Para>
-						When you provide a payment method and subscribe to a paid plan, you
-						expressly authorise {LEGAL.operator} to charge that payment method
-						the fee for your plan, for the billing period you chose, on a
-						recurring basis. That authorisation stands until you cancel under{" "}
-						<Ref id="cancellation" />.
-					</Para>
-				</Callout>
-				<Para>
-					Your subscription renews automatically at the end of each billing
-					period unless you cancel before it ends. Before an annual subscription
-					renews we will email you in advance, in time to cancel if you no
-					longer want it.
-				</Para>
-
-				<Subheading>b. Price changes</Subheading>
-				<Para>
-					If we change the price of a plan you are on, we will tell you before
-					the change takes effect, and it will only apply from your next renewal
-					— never mid-period. If you do not want to pay the new price, cancel
-					before that renewal; letting it renew is your acceptance of it.
-				</Para>
-
-				<Subheading>c. How the payment is taken</Subheading>
-				<Para>
-					Payments are handled by {LEGAL.paymentProcessor}. Your card details go
-					to them and never reach our servers — we cannot see your card number,
-					which is deliberate: what we never hold cannot leak from us. What we
-					do keep is your plan, your billing period, {LEGAL.paymentProcessor}'s
-					transaction references and the invoices we are required to retain —
-					described in our{" "}
-					<Link
-						className="text-primary underline underline-offset-2"
-						to="/privacy"
-					>
-						Privacy Policy
-					</Link>
-					.
-				</Para>
-				<Para>
-					If a renewal payment fails we may retry it and will tell you. If it
-					keeps failing, the subscription ends and the account returns to the
-					free plan; we do not send unpaid invoices to collection.
-				</Para>
-
-				<Subheading>d. Taxes</Subheading>
-				<Para>
-					Prices are exclusive of applicable taxes — VAT, GST, sales tax and the
-					like — unless we say otherwise. Where the law requires us to collect
-					and remit them, they are added to what you are charged.
-				</Para>
-			</>
-		),
-	},
-	{
-		id: "cancellation",
-		title: "Cancelling your subscription",
-		body: (
-			<>
-				<Subheading>a. How to cancel</Subheading>
-				<Para>
-					You can cancel at any time, without giving a reason, either:
-				</Para>
-				<Bullets>
-					<li>
-						<strong>In the app</strong> — your dashboard's subscription card has
-						a cancel control. This is the quickest route and needs nothing from
-						us.
-					</li>
-					<li>
-						<strong>By email</strong> — write to <ContactEmail /> from the
-						address on your account.
-					</li>
-				</Bullets>
-				<Para>
-					Cancelling takes effect immediately, in the sense that no further
-					charge will be made. We confirm it by email within{" "}
-					{LEGAL_BILLING.cancellationConfirmationMinutes} minutes.
-				</Para>
-
-				<Subheading>b. What happens afterwards</Subheading>
-				<Bullets>
-					<li>
-						Your paid plan keeps working until the end of the period you have
-						already paid for. You are not cut off the moment you cancel.
-					</li>
-					<li>
-						You are not charged again. There is nothing further to do and no
-						notice period.
-					</li>
-					<li>
-						When that period ends the account returns to the free plan, and the
-						history window goes back to {FREE_HISTORY_DAYS} days.
-					</li>
-					<li>
-						Cancelling does not delete your account or your data. Deleting is a
-						separate request — see <Ref id="your-data" /> — so cancelling never
-						costs you anything you would want to keep.
-					</li>
-				</Bullets>
-			</>
-		),
-	},
-	{
-		id: "refunds",
-		title: "Refunds",
-		body: (
-			<>
-				<Subheading>a. The general rule</Subheading>
-				<Para>
-					The Service is delivered digitally and immediately, so subscription
-					fees are generally not refundable. The exceptions below are real ones,
-					and we would rather refund you than argue.
-				</Para>
-
-				<Subheading>b. When we do refund</Subheading>
-				<Bullets>
-					<li>
-						<strong>
-							New subscriber guarantee — {LEGAL_BILLING.newSubscriberRefundDays}{" "}
-							days.
-						</strong>{" "}
-						If this is your first subscription with us, ask within{" "}
-						{LEGAL_BILLING.newSubscriberRefundDays} days of the first charge and
-						we refund it in full. No conditions on how much you used it.
-					</li>
-					<li>
-						<strong>Duplicate or mistaken charges.</strong> Charged twice, or
-						charged after cancelling? Refunded in full, and you do not have to
-						be the one who spots it.
-					</li>
-					<li>
-						<strong>
-							Outages longer than {LEGAL_BILLING.outageRefundHours} hours.
-						</strong>{" "}
-						If the paid features are unavailable for that long through our
-						fault, you get a pro-rata refund or an equivalent extension,
-						whichever you prefer.
-					</li>
-					<li>
-						<strong>Your statutory rights.</strong> Where the law gives you a
-						right to withdraw or to a refund — such as the 14-day cooling-off
-						period in the EU and the UK — that right applies on top of this
-						section and nothing here limits it.
-					</li>
-				</Bullets>
-
-				<Subheading>c. How to ask</Subheading>
-				<Para>
-					Email <ContactEmail /> with the address on your account, the
-					transaction reference and what happened. We acknowledge within{" "}
-					{LEGAL_BILLING.refundAcknowledgeBusinessDays} business days and, where
-					the refund is due, it reaches your payment method within{" "}
-					{LEGAL_BILLING.refundProcessingBusinessDays.min}–
-					{LEGAL_BILLING.refundProcessingBusinessDays.max} business days,
-					depending on your bank.
-				</Para>
-
-				<Subheading>d. What we do not refund</Subheading>
-				<Bullets>
-					<li>
-						Billing periods you have already used, except in the cases above.
-					</li>
-					<li>
-						An annual subscription, once more than{" "}
-						{LEGAL_BILLING.annualRefundCutoffDays} days have passed since the
-						initial purchase.
-					</li>
-					<li>
-						Accounts we closed for a material breach of these Terms or of{" "}
-						<Ref id="acceptable-use" />.
-					</li>
-				</Bullets>
-			</>
+			<Para>
+				The Service is free to use. We do not charge you, and we do not ask for
+				or hold payment details.
+			</Para>
 		),
 	},
 	{
@@ -554,10 +342,10 @@ const SECTIONS: readonly LegalSection[] = [
 		body: (
 			<Para>
 				The Service depends on third parties — Google above all, plus hosting
-				and infrastructure providers, {LEGAL.paymentProcessor} for payments, and
-				any MCP client you connect. We do not control them, we do not endorse
-				them, and we are not responsible for their acts, omissions,
-				availability, or terms. Your relationship with each of them is your own.
+				and infrastructure providers, and any MCP client you connect. We do not
+				control them, we do not endorse them, and we are not responsible for
+				their acts, omissions, availability, or terms. Your relationship with
+				each of them is your own.
 			</Para>
 		),
 	},
@@ -745,8 +533,7 @@ function TermsOfServicePage() {
 						These terms set out what you can expect from {LEGAL.appName} and
 						what we expect from you. They are deliberately short on ceremony:
 						the Service reads health data you already own live from Google and
-						hands it to tools you choose. It keeps no copy of it unless you ask
-						it to.
+						hands it to tools you choose. It keeps no copy of it.
 					</Para>
 					<Para>
 						Two sections matter more than the rest. Read{" "}

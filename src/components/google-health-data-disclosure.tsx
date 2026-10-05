@@ -16,13 +16,10 @@ export function GoogleHealthDataDisclosure() {
 					Before you grant this, here is what happens to the data.
 				</strong>{" "}
 				We read the categories you leave ticked directly from Google when you or
-				an MCP client you connect makes a request, and by default we keep no
-				copy of your health records on our servers. Stored history is currently
-				unavailable for new opt-ins. If your account already has stored history,
-				you can stop and delete it on the History tab. We never sell the data,
-				use it for advertising, or hand it to anyone else for their own
-				purposes. We send it to an MCP client only when you connect that client
-				yourself.
+				an MCP client you connect makes a request, and we keep no copy of your
+				health records on our servers. We never sell the data, use it for
+				advertising, or hand it to anyone else for their own purposes. We send
+				it to an MCP client only when you connect that client yourself.
 			</p>
 			<p className="mt-2">
 				You can stop future access at any time: remove this Service from{" "}

@@ -11,7 +11,6 @@ interface IntegrationStep {
 
 const steps: readonly IntegrationStep[] = [
 	{ name: "database_migration", args: ["db:migrate"] },
-	{ name: "health_cache_roundtrip", args: ["db:roundtrip"] },
 	{ name: "production_build", args: ["build"] },
 	{ name: "browser_smoke_tests", args: ["test:e2e"] },
 ];

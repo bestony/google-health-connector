@@ -1,9 +1,8 @@
-import { readHealthDataPoints } from "../../db/health-cache.server";
+import { canonicalJson } from "../canonical-json";
 import {
 	GOOGLE_HEALTH_DATA_POINT_TYPES,
 	type GoogleHealthDataPointType,
 } from "../google-health-api.gen";
-import { canonicalJson } from "../google-health-cache-record.server";
 import {
 	type GoogleHealthRollupType,
 	googleHealthRollupType,
@@ -24,37 +23,28 @@ import {
 	summarizeRollupPoint,
 } from "./aggregate";
 import type { McpIdentity } from "./credential";
+import { clampHistoryWindow, summarizeDataPoint } from "./health";
 import {
-	clampHistoryWindow,
-	HISTORY_LIMIT_DAYS,
-	summarizeDataPoint,
-} from "./health";
-import {
-	type CacheLookup,
 	clampNote,
 	clientFor,
 	json,
 	missingScope,
 	parseReadRange,
 	readHealthDataFailure,
-	resolveCacheLookup,
 	text,
 } from "./tool-support.server";
 
 /**
  * The `aggregate_health_data` tool: where an aggregate comes from.
  *
- * Three paths, chosen in this order.
+ * Two paths, chosen in this order. Both read live from Google.
  *
- * 1. **Stored history**, when the user keeps one and it covers the window
- *    completely — the same rule `read_health_data` applies, for the same
- *    reason. It reaches back years and costs Google nothing.
- * 2. **Google's `rollUp`**, when the type has one. Google reconciles across
+ * 1. **Google's `rollUp`**, when the type has one. Google reconciles across
  *    devices before it sums, and it aggregates server-side: a fortnight of
  *    heart rate is some thirty thousand points that never have to cross the
  *    wire, which is the difference between answering and timing out on a
  *    ten-second serverless function.
- * 3. **Raw points, aggregated here**, for the rest of the catalog — sleep,
+ * 2. **Raw points, aggregated here**, for the rest of the catalog — sleep,
  *    daily summaries, most clinical samples. These are the sparse types, which
  *    is what makes reading them raw affordable.
  *
@@ -64,15 +54,6 @@ import {
 const log = createLogger("mcp:aggregate");
 
 const TOOL = "aggregate_health_data";
-
-/**
- * The most stored points one aggregate will read.
- *
- * About a month of heart rate. Hitting it is refused rather than truncated: an
- * aggregate over the first fifty thousand points of a window is a confident
- * wrong answer about the rest of it.
- */
-const MAX_CACHED_POINTS = 50_000;
 
 /**
  * The most raw points fetched from Google for a computed aggregate — four
@@ -133,7 +114,7 @@ interface AggregateRequest {
 	historyClamped: string | undefined;
 }
 
-/** The fields every path's reply shares, so the three cannot drift apart. */
+/** The fields every path's reply shares, so the paths cannot drift apart. */
 function replyEnvelope(request: AggregateRequest) {
 	const { window } = request;
 	return {
@@ -179,54 +160,6 @@ function computedReply(
 		note: COMPUTED_NOTE,
 		pointsInWindow: result.pointsInWindow,
 	};
-}
-
-async function aggregateFromCache(
-	request: AggregateRequest,
-	type: GoogleHealthDataPointType,
-	lookup: CacheLookup,
-) {
-	const { dataType, identity, window } = request;
-	const onEnd = anchorsOnEnd(dataType);
-	const rows = await readHealthDataPoints({
-		anchor: onEnd ? "overlap" : "start",
-		dataType,
-		fromMs: window.fromMs,
-		limit: MAX_CACHED_POINTS + 1,
-		toMs: window.toMs,
-		userId: identity.userId,
-	});
-	if (rows.length > MAX_CACHED_POINTS) {
-		log.warn("refused aggregate: too many stored points", {
-			dataType,
-			limit: MAX_CACHED_POINTS,
-			userId: identity.userId,
-		});
-		return tooManyPoints(MAX_CACHED_POINTS);
-	}
-
-	const reply = computedReply(
-		request,
-		type,
-		rows.map((row) => ({
-			atMs: onEnd ? row.observedEndMs : row.observedAtMs,
-			sourceKey: row.sourceKey,
-			value: row.value,
-		})),
-	);
-	log.debug("aggregated health data", {
-		buckets: reply.bucketCount,
-		dataType,
-		granularity: request.granularity,
-		points: rows.length,
-		source: "cache",
-		userId: identity.userId,
-	});
-	return json({
-		...reply,
-		cachedThrough: lookup.coveredThrough,
-		source: "cache",
-	});
 }
 
 async function aggregateFromRollup(
@@ -378,7 +311,7 @@ function tooManyBuckets(window: AggregateWindow, granularity: string) {
 }
 
 type PlannedAggregate =
-	| { ok: true; request: AggregateRequest; lookup: CacheLookup; now: Date }
+	| { ok: true; request: AggregateRequest; now: Date }
 	| { ok: false; response: ReturnType<typeof text> };
 
 function refuse(message: string): PlannedAggregate {
@@ -387,14 +320,13 @@ function refuse(message: string): PlannedAggregate {
 
 /**
  * Everything that can be decided before any data is fetched: the window, the
- * clock it is drawn on, how far back it may reach, and where it will be read
- * from.
+ * clock it is drawn on, and how far back it may reach.
  */
-async function planAggregate(
+function planAggregate(
 	identity: McpIdentity,
 	input: AggregateHealthDataInput,
 	target: AggregateTarget,
-): Promise<PlannedAggregate> {
+): PlannedAggregate {
 	const parsedRange = parseReadRange(input.from, input.to);
 	if (!parsedRange.ok) return parsedRange;
 
@@ -417,25 +349,9 @@ async function planAggregate(
 	if (!resolved.ok) return resolved;
 	const requested = resolved.window;
 
-	// Decided against the window as asked, then clamped — the same order
-	// `read_health_data` uses, so the source and the limit cannot disagree. A
-	// rollup-only type has no raw points, so there is nothing stored to find.
-	const lookup: CacheLookup =
-		target.type === undefined
-			? {
-					coveredThrough: undefined,
-					limitDays: HISTORY_LIMIT_DAYS,
-					source: "live",
-				}
-			: await resolveCacheLookup(identity.userId, dataType, {
-					fromMs: requested.fromMs,
-					toMs: requested.toMs,
-				});
-
 	const clamped = clampHistoryWindow(
 		{ from: new Date(requested.fromMs), to: new Date(requested.toMs) },
 		now,
-		lookup.limitDays,
 	);
 	const window = startAggregateWindowAt(requested, clamped.from.getTime());
 	if (window.buckets === 0) {
@@ -449,7 +365,6 @@ async function planAggregate(
 	}
 
 	return {
-		lookup,
 		now,
 		ok: true,
 		request: {
@@ -479,15 +394,12 @@ export async function aggregateHealthData(
 		);
 	}
 
-	const plan = await planAggregate(identity, input, target);
+	const plan = planAggregate(identity, input, target);
 	if (!plan.ok) return plan.response;
-	const { lookup, now, request } = plan;
+	const { now, request } = plan;
 
 	if (target.type === undefined) {
 		return aggregateFromRollup(request, target.rollup, now);
-	}
-	if (lookup.source === "cache") {
-		return aggregateFromCache(request, target.type, lookup);
 	}
 	if (target.rollup !== undefined) {
 		return aggregateFromRollup(request, target.rollup, now);

@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
-import { readHealthDataPoints } from "../../db/health-cache.server";
 import type { GoogleHealthDataTypeId } from "../google-health-api.gen";
+import { HISTORY_LIMIT_DAYS } from "../health-history";
 import { LEGAL } from "../legal";
 import { createLogger } from "../logger.server";
 import {
@@ -16,13 +16,11 @@ import {
 	clampHistoryWindow,
 	describeAggregateOnlyTypes,
 	describeDataTypes,
-	HISTORY_LIMIT_DAYS,
 	readableCategories,
 	summarizeDataPoint,
 } from "./health";
 import { MCP_OAUTH_SCOPE } from "./oauth-scopes";
 import {
-	type CacheLookup,
 	clampNote,
 	clientFor,
 	DAY_MS,
@@ -31,7 +29,6 @@ import {
 	missingScope,
 	parseReadRange,
 	readHealthDataFailure,
-	resolveCacheLookup,
 	text,
 } from "./tool-support.server";
 
@@ -105,35 +102,11 @@ async function readHealthData(
 	const parsedRange = parseReadRange(from, to);
 	if (!parsedRange.ok) return parsedRange.response;
 
-	const now = new Date();
 	const wanted = limit ?? DEFAULT_LIMIT;
-
-	// Decided against a *provisional* window so the clamp and the source cannot
-	// disagree: the cache is asked about the window the caller actually named,
-	// and only then is the entitled limit applied.
-	const lookup = await resolveCacheLookup(identity.userId, dataType, {
-		fromMs: (
-			parsedRange.from ?? new Date(now.getTime() - HISTORY_LIMIT_DAYS * DAY_MS)
-		).getTime(),
-		toMs: parsedRange.to?.getTime(),
-	});
-
 	const window = clampHistoryWindow(
 		{ from: parsedRange.from, to: parsedRange.to },
-		now,
-		lookup.limitDays,
+		new Date(),
 	);
-
-	const upperBound = window.to;
-	if (lookup.source === "cache" && upperBound !== undefined) {
-		return readFromCache({
-			dataType,
-			identity,
-			lookup,
-			wanted,
-			window: { ...window, to: upperBound },
-		});
-	}
 
 	const client = clientFor(identity);
 	try {
@@ -165,64 +138,6 @@ async function readHealthData(
 	}
 }
 
-/**
- * Serves a fully covered window from the stored history.
- *
- * `anchor: "overlap"` for sleep, matching what `google-health-filter.ts` does
- * for a live read of the same type: a night that began before the window is the
- * normal case, and anchoring on the start would drop exactly the night that was
- * asked about.
- */
-interface CacheReadRequest {
-	identity: McpIdentity;
-	dataType: string;
-	window: ReturnType<typeof clampHistoryWindow> & { to: Date };
-	wanted: number;
-	lookup: CacheLookup;
-}
-
-async function readFromCache(request: CacheReadRequest) {
-	const { dataType, identity, lookup, wanted, window } = request;
-	const rows = await readHealthDataPoints({
-		anchor: dataType === "sleep" ? "overlap" : "start",
-		dataType,
-		fromMs: window.from.getTime(),
-		limit: wanted,
-		toMs: window.to.getTime(),
-		userId: identity.userId,
-	});
-
-	log.debug("read health data", {
-		clamped: window.clamped,
-		dataType,
-		points: rows.length,
-		source: "cache",
-		userId: identity.userId,
-	});
-
-	return json({
-		cachedThrough: lookup.coveredThrough,
-		count: rows.length,
-		dataPoints: rows.map((row) => ({
-			end:
-				row.observedEndMs === row.observedAtMs
-					? undefined
-					: new Date(row.observedEndMs).toISOString(),
-			name: row.resourceName ?? undefined,
-			start: new Date(row.observedAtMs).toISOString(),
-			type: row.dataType,
-			value: row.value,
-		})),
-		dataType,
-		from: window.from.toISOString(),
-		historyClamped: clampNote(window),
-		note: "Served from this account's stored history. The same measurement reported by two devices is two points; group by `source` before summing.",
-		source: "cache",
-		to: window.to.toISOString(),
-		truncated: rows.length >= wanted,
-	});
-}
-
 export function createMcpServer(identity: McpIdentity): McpServer {
 	const server = new McpServer(MCP_SERVER_INFO, {
 		// This copy is returned on every initialize response. Name both supported
@@ -236,9 +151,8 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 			"instead of thousands of raw points; use `read_health_data` when the " +
 			"individual points matter. Every request must " +
 			"use either an API key or an OAuth access token with the " +
-			`\`${MCP_OAUTH_SCOPE}\` scope. A live read reaches back at most ` +
-			`${HISTORY_LIMIT_DAYS} days; if the user stores their history, a read ` +
-			"with both `from` and `to` can reach back years instead.",
+			`\`${MCP_OAUTH_SCOPE}\` scope. Every read is live from Google and ` +
+			`reaches back at most ${HISTORY_LIMIT_DAYS} days.`,
 	});
 
 	server.registerTool(
@@ -277,10 +191,7 @@ export function createMcpServer(identity: McpIdentity): McpServer {
 				"Read the user's data points for one data type over a time range. " +
 				"Use an id from `list_health_data_types`. Times are RFC 3339, e.g. " +
 				"`2026-08-01T00:00:00Z`; omit them to get the most recent data. " +
-				"Give both `from` and `to` for anything historical: a bounded range " +
-				"can be answered from this account's stored history, which reaches " +
-				"much further back than a live read, and the reply says which was " +
-				"used in `source`.",
+				`A read reaches back at most ${HISTORY_LIMIT_DAYS} days.`,
 			inputSchema: {
 				dataType: z
 					.string()

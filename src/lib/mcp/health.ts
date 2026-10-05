@@ -7,7 +7,7 @@ import {
 	GOOGLE_HEALTH_ROLLUP_TYPES,
 	googleHealthRollupType,
 } from "../google-health-rollup";
-import { FREE_HISTORY_DAYS } from "../plans";
+import { HISTORY_LIMIT_DAYS } from "../health-history";
 
 /**
  * The parts of the health MCP tools worth having outside a transport: the
@@ -22,14 +22,6 @@ import { FREE_HISTORY_DAYS } from "../plans";
 /** A day, in milliseconds. */
 const DAY_MS = 24 * 60 * 60 * 1000;
 
-/**
- * How far back a read may reach.
- *
- * The free tier's window, applied to everyone: there is no billing and no plan
- * column on the user, so there is nothing to tell a subscriber apart with.
- */
-export const HISTORY_LIMIT_DAYS = FREE_HISTORY_DAYS;
-
 export interface HistoryWindow {
 	from: Date;
 	to: Date | undefined;
@@ -43,14 +35,9 @@ export interface ClampedWindow extends HistoryWindow {
 }
 
 /**
- * Constrains a requested window to the history the account is entitled to.
+ * Constrains a requested window to the history a read may reach.
  *
- * The limit applies to everyone for now. There is no billing and no plan column
- * on the user, so there is nothing to tell a subscriber from anyone else —
- * applying the free tier's window to all is the honest reading of that, and
- * relaxing it later is a change to this one function.
- *
- * A caller that asks for more gets less *and is told so*: silently returning
+ * The same limit applies to every account and every read. A caller that asks for more gets less *and is told so*: silently returning
  * three months when a year was asked for would have a model conclude the user
  * simply has no older data, which is a wrong answer rather than a limitation.
  */
@@ -69,51 +56,6 @@ export function clampHistoryWindow(
 		clamped,
 		limitDays,
 	};
-}
-
-/** Where a read's data came from, which the reply names so a model can tell. */
-export type HealthReadSource = "cache" | "live";
-
-export interface CachedCoverage {
-	fromMs: number | null;
-	throughMs: number | null;
-}
-
-export interface ReadSourceInput {
-	/** The window after clamping, with `to` resolved to an instant. */
-	fromMs: number;
-	toMs: number | undefined;
-	/** The user opted into storing history and this type is not blocked. */
-	cacheEnabled: boolean;
-	coverage: CachedCoverage | undefined;
-}
-
-/**
- * Whether a read can be answered from the cache.
- *
- * Three conditions, all required. The user must have opted in; the request must
- * name an upper bound; and the cache must cover the window *completely*.
- *
- * The upper bound matters more than it looks. A request with no `to` means
- * "up to now", and the sync deliberately stops at D-2 because a more recent day
- * is still settling — so an open-ended request can never be fully covered and
- * must go to Google. That is the right answer rather than a limitation to work
- * around: the open-ended question is asking for the newest data, which is
- * exactly what the cache does not have.
- *
- * Total containment rather than overlap, for the same reason `coversWindow`
- * insists on it: a partially covered window served from cache looks to the
- * caller like a complete answer that happens to be short, which is a wrong
- * answer rather than a slow one.
- */
-export function chooseReadSource(input: ReadSourceInput): HealthReadSource {
-	if (!input.cacheEnabled) return "live";
-	if (input.toMs === undefined) return "live";
-	const { coverage } = input;
-	if (coverage === undefined) return "live";
-	const { fromMs, throughMs } = coverage;
-	if (fromMs === null || throughMs === null) return "live";
-	return fromMs <= input.fromMs && throughMs >= input.toMs ? "cache" : "live";
 }
 
 /** One data point, flattened to what an assistant can reason about. */

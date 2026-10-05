@@ -1,12 +1,4 @@
-import {
-	readHealthSyncAccount,
-	readHealthSyncStates,
-} from "../../db/health-sync-state.server";
-import {
-	getAuthBaseUrl,
-	getHealthSyncBackfillDays,
-	isHealthSyncEnabled,
-} from "../env.server";
+import { getAuthBaseUrl } from "../env.server";
 import {
 	createGoogleHealthClient,
 	GoogleHealthApiError,
@@ -15,11 +7,7 @@ import { GoogleHealthAuthorizationError } from "../google-health-token.server";
 import { createLogger } from "../logger.server";
 import { type McpIdentity, mcpIdentityHasScope } from "./credential";
 import {
-	type CachedCoverage,
 	type ClampedWindow,
-	chooseReadSource,
-	type HealthReadSource,
-	HISTORY_LIMIT_DAYS,
 	readableCategories,
 	scopeCategory,
 } from "./health";
@@ -28,8 +16,7 @@ import { MCP_OAUTH_SCOPE } from "./oauth-scopes";
 /**
  * What every health tool needs before it can do its own work: a result in the
  * protocol's shape, a refusal for a token without the scope, a Google failure
- * phrased so a model can act on it, and the decision between stored history
- * and a live read.
+ * phrased so a model can act on it, and the note a clamped window owes.
  *
  * Split from `server.ts` so that module stays an assembly — which tools exist
  * and how they are described — while each tool's orchestration lives beside
@@ -161,66 +148,6 @@ export async function readHealthDataFailure(
 
 /** A day, in milliseconds. */
 export const DAY_MS = 24 * 60 * 60 * 1000;
-
-export interface CacheLookup {
-	source: HealthReadSource;
-	/** How far back this read may reach, in days. */
-	limitDays: number;
-	coveredThrough: string | undefined;
-}
-
-/**
- * Whether this read can come from the stored history, and how far back it may
- * reach.
- *
- * The history limit differs by source on purpose. A live read is clamped to
- * `HISTORY_LIMIT_DAYS` because that is the window this account is entitled to.
- * A cached read is clamped to the backfill floor instead, because the cache
- * only ever contains what the sync fetched — the floor *is* the entitlement,
- * enforced when the data was written rather than again when it is read. Without
- * that, a user who opted in and waited for two years of history to accumulate
- * could not read any of it past ninety days, and the feature would collect data
- * nobody could ask about.
- */
-export async function resolveCacheLookup(
-	userId: string,
-	dataType: string,
-	window: { fromMs: number; toMs: number | undefined },
-): Promise<CacheLookup> {
-	const live: CacheLookup = {
-		coveredThrough: undefined,
-		limitDays: HISTORY_LIMIT_DAYS,
-		source: "live",
-	};
-	if (!isHealthSyncEnabled()) return live;
-
-	const account = await readHealthSyncAccount(userId);
-	if (account?.enabled !== true) return live;
-
-	const state = (await readHealthSyncStates(userId)).find(
-		(row) => row.dataType === dataType,
-	);
-	const coverage: CachedCoverage | undefined =
-		state === undefined
-			? undefined
-			: { fromMs: state.coveredFromMs, throughMs: state.coveredThroughMs };
-
-	const source = chooseReadSource({
-		cacheEnabled: true,
-		coverage,
-		fromMs: window.fromMs,
-		toMs: window.toMs,
-	});
-
-	return {
-		coveredThrough:
-			state === undefined || state.coveredThroughMs === null
-				? undefined
-				: new Date(state.coveredThroughMs).toISOString(),
-		limitDays: getHealthSyncBackfillDays(),
-		source,
-	};
-}
 
 /** The one sentence a clamped window owes its caller. */
 export function clampNote(window: ClampedWindow): string | undefined {
