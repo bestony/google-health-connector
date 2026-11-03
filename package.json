@@ -50,7 +50,7 @@
 		"@tanstack/react-router-devtools": "latest",
 		"@tanstack/react-router-ssr-query": "latest",
 		"@tanstack/react-start": "latest",
-		"better-auth": "1.7.0-rc.5",
+		"better-auth": "1.7.7",
 		"dotenv": "^17.4.2",
 		"drizzle-orm": "1.0.0-rc.4",
 		"mysql2": "^3.23.2",
